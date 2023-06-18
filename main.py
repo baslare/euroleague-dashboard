@@ -1,8 +1,13 @@
+import json
 from el_api_wrapper import ELAPI
 
 if __name__ == '__main__':
     el = ELAPI()
-    resp = el.get_points(season='2022', game='1')
+    response = el.get_season_stats(2022)
 
-    print(resp)
+    with open("dnm.json","w") as file:
+        json.dump(response, file)
+
+
+
 
