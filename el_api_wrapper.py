@@ -157,7 +157,7 @@ class ELAPI:
         except json.JSONDecodeError as err:
             return -1
 
-    def get_season_stats(self, season,game=1):
+    def get_season_stats(self, season, game=1):
         json_error_count = 50
         game = game
         max_game_count = self.get_number_of_games(season)
@@ -176,7 +176,7 @@ class ELAPI:
                 with open("dnm.json", "w") as file:
                     json.dump(season_games_list, file)
 
-                print('Unhandled Exception: ', e,"game: ", game, " season: ", season, " .json file saved")
+                print('Unhandled Exception: ', e, "game: ", game, " season: ", season, " .json file saved")
 
             game = game + 1
             pbar.update(1)
