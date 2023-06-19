@@ -121,13 +121,13 @@ class ELAPI:
             play_by_play = self.get_playbyplay(season, game)
 
             game_dict = {"season": season,
-                         "game": game,
-                         "homeTeam": home_team,
-                         "awayTeam": away_team,
+                         "game_code": game,
+                         "home_team": home_team,
+                         "away_team": away_team,
                          "points": points,
-                         "homePlayers": home_players,
-                         "awayPlayers": away_players,
-                         "playByPlay": play_by_play}
+                         "home_players": home_players,
+                         "away_players": away_players,
+                         "play_by_play": play_by_play}
 
             return game_dict
 

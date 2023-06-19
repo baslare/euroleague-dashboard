@@ -3,7 +3,6 @@ import numpy as np
 
 
 def make_pbp_df(pbp_data: dict) -> pd.DataFrame:
-
     pbp_quarters = {key: val for key, val in pbp_data.items() if type(val) == list}
     pbp_quarters = {key: pd.DataFrame(val) for key, val in pbp_quarters.items()}
 
@@ -14,7 +13,8 @@ def make_pbp_df(pbp_data: dict) -> pd.DataFrame:
     pbp_quarters["PLAYTYPE"][0] = "BG"
 
     pbp_quarters.loc[len(pbp_quarters["MARKERTIME"]) - 1, "MARKERTIME"] = "00:00"
-    pbp_quarters["MINUTE"][len(pbp_quarters["MINUTE"]) - 1] = pbp_quarters["MINUTE"][len(pbp_quarters["MINUTE"]) - 1] - 1
+    pbp_quarters["MINUTE"][len(pbp_quarters["MINUTE"]) - 1] = pbp_quarters["MINUTE"][
+                                                                  len(pbp_quarters["MINUTE"]) - 1] - 1
 
     pbp_quarters["Quarter"] = np.where(pbp_quarters["MINUTE"] <= 40, np.ceil(pbp_quarters["MINUTE"] / 10),
                                        np.where(pbp_quarters["MINUTE"] <= 45, 5,
@@ -23,13 +23,21 @@ def make_pbp_df(pbp_data: dict) -> pd.DataFrame:
 
     pbp_quarters[["min", "sec"]] = pbp_quarters["MARKERTIME"].str.split(":", expand=True)
 
-    pbp_quarters['time'] = (pbp_quarters["MINUTE"] - 1)*60 + (60 - pbp_quarters["sec"].fillna("00").astype(int))
+    pbp_quarters['time'] = (pbp_quarters["MINUTE"] - 1) * 60 + (60 - pbp_quarters["sec"].fillna("00").astype(int))
 
     pbp_quarters = pbp_quarters.loc[~pbp_quarters["PLAYTYPE"].isin(["BP", "EP"]), :]
 
     pbp_quarters["playerIn"] = pbp_quarters["PLAYTYPE"] == 'IN'
     pbp_quarters["playerOut"] = pbp_quarters["PLAYTYPE"] == 'OUT'
     pbp_quarters["CODETEAM"] = pbp_quarters["CODETEAM"].str.replace(" ", "")
-    pbp_quarters["PLAYER_ID"] = pbp_quarters["PLAYER_ID"].str.replace(" ",  "")
+    pbp_quarters["PLAYER_ID"] = pbp_quarters["PLAYER_ID"].str.replace(" ", "")
 
-    return pbp_quarters
+    return pbp_quarters.reset_index(drop=True)
+
+
+def make_players_df(players_data: list):
+    return pd.DataFrame.from_records(players_data).reset_index(drop=True)
+
+
+def make_points_df(points: dict):
+    return pd.DataFrame.from_records(points.get("Rows"))

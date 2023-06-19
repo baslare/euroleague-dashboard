@@ -2,3 +2,4 @@ pandas
 requests
 tqdm
 numpy
+dataclasses-json
