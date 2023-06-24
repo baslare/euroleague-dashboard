@@ -16,7 +16,12 @@ if __name__ == '__main__':
 
     gd: GameData
     gd = GameData.from_dict(response)
-    print(gd.points)
+
+    pbp = gd.get_lineups()
+    pbp.to_csv("pbp1.csv")
+
+
+
 
 
 
