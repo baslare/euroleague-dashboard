@@ -9,12 +9,13 @@ def make_pbp_df(pbp_data: dict) -> pd.DataFrame:
     pbp_quarters = pd.concat(pbp_quarters).reset_index()
     pbp_quarters = pbp_quarters[["CODETEAM", "PLAYER_ID", "PLAYTYPE", "PLAYER", "MARKERTIME", "MINUTE"]]
 
-    pbp_quarters["MARKERTIME"][0] = "09:60"
-    pbp_quarters["PLAYTYPE"][0] = "BG"
+    pbp_quarters.loc[0, "MARKERTIME"] = "10:00"
+    pbp_quarters.loc[pbp_quarters.shape[0] - 1,"MARKERTIME"] = "00:00"
+    pbp_quarters.loc[0, "PLAYTYPE"] = "BG"
+    pbp_quarters = pbp_quarters.loc[(pbp_quarters["PLAYTYPE"] != "BP") & (pbp_quarters["PLAYTYPE"] != "EP"), :]
 
     pbp_quarters.loc[len(pbp_quarters["MARKERTIME"]) - 1, "MARKERTIME"] = "00:00"
-    pbp_quarters["MINUTE"][len(pbp_quarters["MINUTE"]) - 1] = pbp_quarters["MINUTE"][
-                                                                  len(pbp_quarters["MINUTE"]) - 1] - 1
+    pbp_quarters["MINUTE"].iloc[-1] = pbp_quarters["MINUTE"].iloc[-1] - 1
 
     pbp_quarters["Quarter"] = np.where(pbp_quarters["MINUTE"] <= 40, np.ceil(pbp_quarters["MINUTE"] / 10),
                                        np.where(pbp_quarters["MINUTE"] <= 45, 5,
@@ -23,7 +24,14 @@ def make_pbp_df(pbp_data: dict) -> pd.DataFrame:
 
     pbp_quarters[["min", "sec"]] = pbp_quarters["MARKERTIME"].str.split(":", expand=True)
 
-    pbp_quarters['time'] = (pbp_quarters["MINUTE"] - 1) * 60 + (60 - pbp_quarters["sec"].fillna("00").astype(int))
+    pbp_quarters["min"] = pbp_quarters["min"].astype(int)
+    pbp_quarters["sec"] = pbp_quarters["sec"].fillna("00").astype(int)
+
+    pbp_quarters['time'] = np.where(pbp_quarters["Quarter"] <= 4,
+                                    (pbp_quarters["Quarter"]) * 600 - pbp_quarters["min"]*60 - pbp_quarters["sec"],
+                                    2400 + (pbp_quarters["Quarter"] - 4)*300 - (pbp_quarters["min"]*60 + pbp_quarters["sec"]))
+
+    pbp_quarters = pbp_quarters.sort_values("time")
 
     pbp_quarters = pbp_quarters.loc[~pbp_quarters["PLAYTYPE"].isin(["BP", "EP"]), :]
 
