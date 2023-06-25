@@ -17,8 +17,15 @@ if __name__ == '__main__':
     gd: GameData
     gd = GameData.from_dict(response)
 
-    pbp = gd.get_lineups()
-    pbp.to_csv("pbp1.csv")
+    gd.extract_home_away_lineups()
+    gd.stat_calculator()
+    gd.stat_calculator(home=False)
+
+    gd.opp_stat_calculator().to_csv("lineup.csv")
+
+    gd.lineups_home.to_csv("pbp1.csv")
+    gd.lineups_away.to_csv("pbp2.csv")
+
 
 
 
