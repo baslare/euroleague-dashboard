@@ -39,6 +39,9 @@ def make_pbp_df(pbp_data: dict) -> pd.DataFrame:
     pbp_quarters["playerOut"] = pbp_quarters["PLAYTYPE"] == 'OUT'
     pbp_quarters["CODETEAM"] = pbp_quarters["CODETEAM"].str.replace(" ", "")
     pbp_quarters["PLAYER_ID"] = pbp_quarters["PLAYER_ID"].str.replace(" ", "")
+    pbp_quarters["PLAYTYPE"] = pbp_quarters["PLAYTYPE"].str.replace(" ", "")
+    pbp_quarters.loc[pbp_quarters["playerIn"],"PLAYTYPE"] = "ZZ IN"
+    pbp_quarters.loc[pbp_quarters["playerOut"], "PLAYTYPE"] = "ZZ OUT"
 
     return pbp_quarters.reset_index(drop=True)
 
