@@ -33,6 +33,8 @@ class GameData:
         self.lineups_home: pd.DataFrame
         self.lineups_away: pd.DataFrame
 
+
+
     def get_pbp(self, home=True):
         team = self.home_team if home else self.away_team
         self.play_by_play = self.play_by_play.groupby("time").apply(lambda x: x.sort_values("PLAYTYPE")).reset_index(
@@ -233,7 +235,7 @@ class GameData:
         else:
             self.pbp_processed_away = pbp
 
-    def get_player_stats(self,home=True):
+    def get_player_stats(self, home=True):
 
         pbp = self.pbp_processed_home if home else self.pbp_processed_away
         lineup = self.lineups_home if home else self.lineups_away
@@ -250,15 +252,24 @@ class GameData:
         df = df.loc[df["PLAYER_ID"] != "", :]
 
         player_df_list = []
-        for x in df["PLAYER_ID"]:
+        for idx, x in enumerate(df["PLAYER_ID"]):
             player_df_list.append(lineup.loc[lineup["lineups_string"].str.contains(x), :])
+            player_df_list[idx]["PLAYER_ID"] = x
 
-        # TODO fix player ratios merge
-        player_df_list = [x[stat_keys].sum() for x in player_df_list]
-        player_df_list = pd.concat(player_df_list,axis=1).transpose()
-        player_df_list["PLAYER_ID"] = df["PLAYER_ID"]
 
-        pass
+        player_df_list = pd.concat(player_df_list, axis=0)
+        player_df_list = player_df_list.groupby("PLAYER_ID").agg(stat_dict).reset_index()
+
+        rename_dict = {x: f"team_{x}" for x in stat_keys}
+        player_df_list = player_df_list.rename(columns=rename_dict)
+        team_cols = [f"team_{x}" for x in stat_keys]
+
+        df = df.merge(player_df_list, how="left", on="PLAYER_ID")
+
+        for x, y in zip(stat_keys, team_cols):
+            df[f"{x}_ratio"] = df[x]/df[y]
+
+        # TODO finish player stats per game.
 
     def get_team_stats(self):
         pass
