@@ -28,7 +28,12 @@ if __name__ == '__main__':
     gd.opp_stat_calculator()
     gd.opp_stat_calculator(home=False)
 
-    gd.get_player_stats()
+    gd.calculate_player_stats()
+    gd.calculate_player_stats(home=False)
+
+    gd.calculate_team_stats()
+
+    gd.replace_player_ids()
 
     # gd.pbp_processed_home.to_csv("pbp1.csv")
     # gd.pbp_processed_away.to_csv("pbp2.csv")
