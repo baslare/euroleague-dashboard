@@ -33,7 +33,10 @@ class GameData:
         self.lineups_home: pd.DataFrame
         self.lineups_away: pd.DataFrame
 
+        self.home_players_processed: pd.DataFrame
+        self.away_players_processed: pd.DataFrame
 
+        self.team_stats: pd.DataFrame
 
     def get_pbp(self, home=True):
         team = self.home_team if home else self.away_team
@@ -162,7 +165,7 @@ class GameData:
             str)
         df_lineups_opp["game_epochs"] = pd.cut(df_lineups_opp["time"], game_epochs).astype(str)
 
-        df = df_lineups.groupby(["game_epochs", "lineups_string", "CODETEAM","OPP"]).agg(
+        df = df_lineups.groupby(["game_epochs", "lineups_string", "CODETEAM", "OPP"]).agg(
             stat_dict).reset_index()
 
         df = df.loc[df["duration"] != 0, :]
@@ -235,7 +238,7 @@ class GameData:
         else:
             self.pbp_processed_away = pbp
 
-    def get_player_stats(self, home=True):
+    def calculate_player_stats(self, home=True):
 
         pbp = self.pbp_processed_home if home else self.pbp_processed_away
         lineup = self.lineups_home if home else self.lineups_away
@@ -254,11 +257,13 @@ class GameData:
         player_df_list = []
         for idx, x in enumerate(df["PLAYER_ID"]):
             player_df_list.append(lineup.loc[lineup["lineups_string"].str.contains(x), :])
-            player_df_list[idx]["PLAYER_ID"] = x
+            player_df_list[idx].loc[:, "PLAYER_ID"] = x
 
-
+        stat_keys_extended = stat_keys + [f"opp_{x}" for x in stat_keys]
+        stat_keys_extended.insert(0, "duration")
+        stat_dict_extended = {x: "sum" for x in stat_keys_extended}
         player_df_list = pd.concat(player_df_list, axis=0)
-        player_df_list = player_df_list.groupby("PLAYER_ID").agg(stat_dict).reset_index()
+        player_df_list = player_df_list.groupby("PLAYER_ID").agg(stat_dict_extended).reset_index()
 
         rename_dict = {x: f"team_{x}" for x in stat_keys}
         player_df_list = player_df_list.rename(columns=rename_dict)
@@ -267,12 +272,41 @@ class GameData:
         df = df.merge(player_df_list, how="left", on="PLAYER_ID")
 
         for x, y in zip(stat_keys, team_cols):
-            df[f"{x}_ratio"] = df[x]/df[y]
+            df[f"{x}_ratio"] = df[x] / df[y]
 
-        # TODO finish player stats per game.
+        df["pts"] = df["FTM"] + 2 * df["2FGM"] + 3 * df["3FGM"]
+        df["team_pts"] = df["team_FTM"] + 2 * df["team_2FGM"] + 3 * df["team_3FGM"]
+        df["opp_pts"] = df["opp_FTM"] + 2 * df["opp_2FGM"] + 3 * df["opp_3FGM"]
+        df["plus_minus"] = df["team_pts"] - df["opp_pts"]
 
-    def get_team_stats(self):
-        pass
+        if home:
+            self.home_players_processed = df
+        else:
+            self.away_players_processed = df
+
+    def calculate_team_stats(self):
+        home_stats = self.lineups_home.drop("lineups_string", axis=1).groupby(
+            ["CODETEAM", "OPP"]).agg(sum).reset_index()
+        away_stats = self.lineups_away.drop("lineups_string", axis=1).groupby(
+            ["CODETEAM", "OPP"]).agg(sum).reset_index()
+
+        home_stats["points_scored"] = home_stats["FTM"] + 2 * home_stats["2FGM"] + 3 * home_stats["3FGM"]
+        away_stats["points_scored"] = away_stats["FTM"] + 2 * away_stats["2FGM"] + 3 * away_stats["3FGM"]
+
+        home_stats["home"] = self.home_team == home_stats["CODETEAM"]
+        away_stats["home"] = self.home_team == home_stats["CODETEAM"]
+
+        self.team_stats = pd.concat([home_stats, away_stats])
 
     def replace_player_ids(self):
+
+        home_dict = {idx: name for idx, name in zip(self.home_players["ac"], self.home_players["na"])}
+        away_dict = {idx: name for idx, name in zip(self.away_players["ac"], self.away_players["na"])}
+
+        self.home_players_processed["playerName"] = self.home_players_processed["PLAYER_ID"].map(home_dict).str.title()
+        self.away_players_processed["playerName"] = self.away_players_processed["PLAYER_ID"].map(away_dict).str.title()
+
+        self.lineups_home["lineups"] = self.lineups_home["lineups_string"].replace(home_dict, regex=True).str.title()
+        self.lineups_away["lineups"] = self.lineups_away["lineups_string"].replace(away_dict, regex=True).str.title()
+
         pass
