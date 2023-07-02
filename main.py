@@ -1,52 +1,45 @@
 import json
-
+import pymongo
+from tqdm.auto import tqdm
 import processing.processing_functions
-from processing.game_data import GameData
+from processing.game_data import SeasonData
 from el_api_wrapper import ELAPI
 
 if __name__ == '__main__':
     el = ELAPI()
-    #response = el.get_season_stats(2022)
-    #response = el.get_game_stats(2022, 1)
-    #ls = processing.processing_functions.make_pbp_df(response.get("play_by_play"))
-    #ls.to_csv('game1.csv')
+    # season_instance = SeasonData(2022)
+    # season_game_list = el.get_season_stats(season_instance.season)
 
-    with open("game1.json", "r") as file:
-        response = json.load(file)
+    # with open("season.json", "w") as file:
+    # json.dump(season_game_list, file)
 
-    gd: GameData
-    gd = GameData.from_dict(response)
+    with open("season.json", "r") as file:
+        season_game_list = json.load(file)
 
-    gd.extract_home_away_lineups()
+    season_instance = SeasonData(2022)
+    season_instance.store_games_list(season_game_list)
 
-    gd.stat_calculator()
-    gd.stat_calculator(home=False)
+    pbar = tqdm(total=len(season_game_list))
+    pbar.set_description("Processing Game Data:")
+    i = 0
+    while i < len(season_instance.game_list):
+        season_instance.game_list[i] = season_instance.game_list[i].process_game_data()
+        i += 1
+        pbar.update(1)
+    pbar.close()
 
-    gd.extra_stats_finder()
-    gd.extra_stats_finder(home=False)
+    season_instance.concatenate_lineup_data()
+    season_instance.concatenate_team_data()
+    season_instance.concatenate_player_data()
 
-    gd.opp_stat_calculator()
-    gd.opp_stat_calculator(home=False)
+    client = pymongo.MongoClient("mongodb://root:password@mongo:27017/")
 
-    gd.calculate_player_stats()
-    gd.calculate_player_stats(home=False)
+    db = client["euroleague_dashboard"]
+    lineups = db["lineups"]
+    lineups.insert_many(season_instance.lineup_data.to_dict("records"))
 
-    gd.calculate_team_stats()
+    players = db["players"]
+    players.insert_many(season_instance.player_data.to_dict("records"))
 
-    gd.replace_player_ids()
-
-    # gd.pbp_processed_home.to_csv("pbp1.csv")
-    # gd.pbp_processed_away.to_csv("pbp2.csv")
-
-    # gd.lineups_home.to_csv("lineup1.csv")
-    # gd.lineups_away.to_csv("lineup2.csv")
-
-
-
-
-
-
-
-
-
-
+    teams = db["teams"]
+    teams.insert_many(season_instance.team_data.to_dict("records"))

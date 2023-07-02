@@ -3,6 +3,7 @@ from dataclasses_json import dataclass_json
 from processing.processing_functions import make_pbp_df, make_players_df, make_points_df
 import re
 import pandas as pd
+import pymongo
 
 
 @dataclass_json
@@ -76,6 +77,7 @@ class GameData:
             nonlocal current_lineup
 
             for off_player, in_player in zip(off_player, in_player):
+                #in_player, off_player = list(set(in_player) - set(off_player)), list(set(off_player) - set(in_player))
                 current_lineup.remove(off_player)
                 current_lineup.append(in_player)
 
@@ -95,7 +97,12 @@ class GameData:
 
         pbp_lineups = [None] * pbp.shape[0]
         left_right_indices = [None] * pbp.shape[0]
-        pbp_lineups[0:subs_df["index_left"][0]] = [self.get_starting_lineup()] * subs_df["index_left"][0]
+        pbp_lineups[0:subs_df["index_left"][0]] = [self.get_starting_lineup()] * subs_df["index_left"][0] if home else [
+                                                                                                                           self.get_starting_lineup(
+                                                                                                                               home=False)] * \
+                                                                                                                       subs_df[
+                                                                                                                           "index_left"][
+                                                                                                                           0]
         left_right_indices[0:subs_df["index_left"][0]] = [[0, subs_df["index_left"][0]]] * subs_df["index_left"][0]
 
         for x, y, z in zip(subs_df["index_left"], subs_df["index_right"], subs_df["lineups"]):
@@ -278,6 +285,7 @@ class GameData:
         df["team_pts"] = df["team_FTM"] + 2 * df["team_2FGM"] + 3 * df["team_3FGM"]
         df["opp_pts"] = df["opp_FTM"] + 2 * df["opp_2FGM"] + 3 * df["opp_3FGM"]
         df["plus_minus"] = df["team_pts"] - df["opp_pts"]
+        df["game_code"] = self.game_code
 
         if home:
             self.home_players_processed = df
@@ -292,11 +300,17 @@ class GameData:
 
         home_stats["points_scored"] = home_stats["FTM"] + 2 * home_stats["2FGM"] + 3 * home_stats["3FGM"]
         away_stats["points_scored"] = away_stats["FTM"] + 2 * away_stats["2FGM"] + 3 * away_stats["3FGM"]
+        home_stats["opp_points_scored"] = away_stats["points_scored"]
+        away_stats["opp_points_scored"] = home_stats["points_scored"]
+
+        home_stats["win"] = home_stats["points_scored"] > home_stats["opp_points_scored"]
+        away_stats["win"] = away_stats["points_scored"] > away_stats["opp_points_scored"]
 
         home_stats["home"] = self.home_team == home_stats["CODETEAM"]
-        away_stats["home"] = self.home_team == home_stats["CODETEAM"]
+        away_stats["home"] = self.home_team != home_stats["CODETEAM"]
 
         self.team_stats = pd.concat([home_stats, away_stats])
+        self.team_stats["game_code"] = self.game_code
 
     def replace_player_ids(self):
 
@@ -309,4 +323,69 @@ class GameData:
         self.lineups_home["lineups"] = self.lineups_home["lineups_string"].replace(home_dict, regex=True).str.title()
         self.lineups_away["lineups"] = self.lineups_away["lineups_string"].replace(away_dict, regex=True).str.title()
 
+        pass
+
+    def process_game_data(self):
+
+        self.extract_home_away_lineups()
+
+        self.stat_calculator()
+        self.stat_calculator(home=False)
+
+        self.extra_stats_finder()
+        self.extra_stats_finder(home=False)
+
+        self.opp_stat_calculator()
+        self.opp_stat_calculator(home=False)
+
+        self.calculate_player_stats()
+        self.calculate_player_stats(home=False)
+
+        self.calculate_team_stats()
+
+        self.replace_player_ids()
+        pass
+
+
+@dataclass
+class SeasonData:
+    game_list: list
+    season: int
+    player_data: pd.DataFrame
+    lineup_data: pd.DataFrame
+    team_data: pd.DataFrame
+    player_data_agg: pd.DataFrame
+    lineup_data_agg: pd.DataFrame
+    team_data_agg: pd.DataFrame
+
+    def __init__(self, season):
+        self.season = season
+        self.game_list = []
+
+    def store_games_list(self, game_list):
+        self.game_list = [GameData.from_dict(x) for x in game_list]
+
+    def concatenate_player_data(self):
+        player_data_list = [x for x in self.game_list.home_players_processed] + [x for x in
+                                                                                 self.game_list.away_players_processed]
+        self.player_data = pd.concat(player_data_list)
+
+    def concatenate_lineup_data(self):
+        lineup_data_list = [x for x in self.game_list.lineups_home] + [x for x in
+                                                                       self.game_list.lineups_away]
+        self.lineup_data = pd.concat(lineup_data_list)
+        pass
+
+    def concatenate_team_data(self):
+        team_data_list = [x for x in self.game_list.team_stats]
+        self.lineup_data = pd.concat(team_data_list)
+        pass
+
+    def aggregate_player_data(self):
+        pass
+
+    def aggregate_lineup_data(self):
+        pass
+
+    def aggregate_team_data(self):
         pass

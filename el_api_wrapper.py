@@ -164,6 +164,7 @@ class ELAPI:
         season_games_list = []
 
         pbar = tqdm(total=max_game_count)
+        pbar.set_description("Retrieving Game Data")
 
         while (json_error_count > 0) & (game <= max_game_count):
             try:
