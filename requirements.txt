@@ -3,3 +3,5 @@ requests
 tqdm
 numpy
 dataclasses-json
+pymongo
+ipython

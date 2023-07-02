@@ -10,7 +10,7 @@ def make_pbp_df(pbp_data: dict) -> pd.DataFrame:
     pbp_quarters = pbp_quarters[["CODETEAM", "PLAYER_ID", "PLAYTYPE", "PLAYER", "MARKERTIME", "MINUTE"]]
 
     pbp_quarters.loc[0, "MARKERTIME"] = "10:00"
-    pbp_quarters.loc[pbp_quarters.shape[0] - 1,"MARKERTIME"] = "00:00"
+    pbp_quarters.loc[pbp_quarters.shape[0] - 1, "MARKERTIME"] = "00:00"
     pbp_quarters.loc[0, "PLAYTYPE"] = "BG"
     pbp_quarters = pbp_quarters.loc[(pbp_quarters["PLAYTYPE"] != "BP") & (pbp_quarters["PLAYTYPE"] != "EP"), :]
 
@@ -22,7 +22,10 @@ def make_pbp_df(pbp_data: dict) -> pd.DataFrame:
                                                 np.where(pbp_quarters["MINUTE"] <= 50, 6,
                                                          np.where(pbp_quarters["MINUTE"] <= 55, 7, 8))))
 
+    pbp_quarters = pbp_quarters.loc[pbp_quarters["MARKERTIME"].str.contains(":"),:]
     pbp_quarters[["min", "sec"]] = pbp_quarters["MARKERTIME"].str.split(":", expand=True)
+
+
 
     pbp_quarters["min"] = pbp_quarters["min"].astype(int)
     pbp_quarters["sec"] = pbp_quarters["sec"].fillna("00").astype(int)
