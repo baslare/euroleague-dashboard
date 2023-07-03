@@ -7,16 +7,20 @@ from el_api_wrapper import ELAPI
 
 if __name__ == '__main__':
     el = ELAPI()
-    # season_instance = SeasonData(2022)
-    # season_game_list = el.get_season_stats(season_instance.season)
 
-    # with open("season.json", "w") as file:
-    # json.dump(season_game_list, file)
+    loading = True
 
-    with open("season.json", "r") as file:
-        season_game_list = json.load(file)
+    if loading:
+        season_instance = SeasonData(2022)
+        with open("season.json", "r") as file:
+            season_game_list = json.load(file)
 
-    season_instance = SeasonData(2022)
+    else:
+        season_instance = SeasonData(2022)
+        season_game_list = el.get_season_stats(season_instance.season)
+        with open("season.json", "w") as file:
+            json.dump(season_game_list, file)
+
     season_instance.store_games_list(season_game_list)
 
     pbar = tqdm(total=len(season_game_list))
