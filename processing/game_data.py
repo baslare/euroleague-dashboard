@@ -1,9 +1,10 @@
+import json
 from dataclasses import dataclass
 from dataclasses_json import dataclass_json
 from processing.processing_functions import make_pbp_df, make_players_df, make_points_df
 import re
 import pandas as pd
-import pymongo
+import numpy as np
 
 
 @dataclass_json
@@ -71,15 +72,40 @@ class GameData:
 
         subs_df = pd.concat([inc_player, out_player], axis=1)
 
+        def length_finder(x):
+            if type(x) == list:
+                return len(x)
+            elif x is None:
+                return 0
+            elif x is np.nan:
+                return 0
+            else:
+                return 1
+
+        subs_df_check = [length_finder(x) == length_finder(y) for x, y in zip(
+            subs_df["PLAYER_ID_OUT"], subs_df["PLAYER_ID_IN"])]
+
+        if all(subs_df_check) is False:
+
+            subs_df_test = subs_df.loc[~pd.Series(subs_df_check), :]
+            in_row = subs_df_test["PLAYER_ID_IN"].apply(lambda x: x.values.to_list())
+            out_row = subs_df_test["PLAYER_ID_OUT"].apply(lambda x: x.values.to_list())
+            pass
+
+
+
         current_lineup = self.get_starting_lineup(home)
+        pbp.to_csv("pbp.csv")
 
         def substitution(in_player, off_player):
             nonlocal current_lineup
+            if type(off_player) == float:
+                print(f"problem:{off_player}")
 
-            for off_player, in_player in zip(off_player, in_player):
-                #in_player, off_player = list(set(in_player) - set(off_player)), list(set(off_player) - set(in_player))
-                current_lineup.remove(off_player)
-                current_lineup.append(in_player)
+            current_lineup = [*current_lineup, *in_player]
+
+            for x in off_player:
+                current_lineup.remove(x)
 
             return tuple(current_lineup)
 
