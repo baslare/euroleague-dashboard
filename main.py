@@ -18,8 +18,8 @@ if __name__ == '__main__':
     else:
         season_instance = SeasonData(2022)
         season_game_list = el.get_season_stats(season_instance.season)
-        with open("season.json", "w") as file:
-            json.dump(season_game_list, file)
+        # with open("season.json", "w") as file:
+            # json.dump(season_game_list, file)
 
     season_instance.store_games_list(season_game_list)
 
@@ -27,7 +27,7 @@ if __name__ == '__main__':
     pbar.set_description("Processing Game Data:")
     i = 0
     while i < len(season_instance.game_list):
-        season_instance.game_list[i] = season_instance.game_list[i].process_game_data()
+        season_instance.game_list[i].process_game_data()
         i += 1
         pbar.update(1)
     pbar.close()

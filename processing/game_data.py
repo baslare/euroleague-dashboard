@@ -85,27 +85,44 @@ class GameData:
         subs_df_check = [length_finder(x) == length_finder(y) for x, y in zip(
             subs_df["PLAYER_ID_OUT"], subs_df["PLAYER_ID_IN"])]
 
+        # TODO do it for the case where there could be multiple such inconsistencies.
         if all(subs_df_check) is False:
-
             subs_df_test = subs_df.loc[~pd.Series(subs_df_check), :]
-            in_row = subs_df_test["PLAYER_ID_IN"].apply(lambda x: x.values.to_list())
-            out_row = subs_df_test["PLAYER_ID_OUT"].apply(lambda x: x.values.to_list())
+            in_row = subs_df_test["PLAYER_ID_IN"].explode().dropna().tolist()
+            out_row = subs_df_test["PLAYER_ID_OUT"].explode().dropna().tolist()
+
+            in_row_idx = subs_df_test["index_inc"].explode().dropna().tolist()
+            out_row_idx = subs_df_test["index_out"].explode().dropna().tolist()
+
+            idx = min(subs_df_test.loc[:, "PLAYER_ID_IN"].index)
+
+            with pd.option_context('mode.copy_on_write', True):
+                subs_df.loc[:, "PLAYER_ID_IN"][idx] = in_row
+                subs_df.loc[:, "PLAYER_ID_OUT"][idx] = out_row
+                subs_df.loc[:, "index_inc"][idx] = in_row_idx
+                subs_df.loc[:, "index_out"][idx] = out_row_idx
+
+            subs_df = subs_df.dropna()
+
             pass
 
-
-
         current_lineup = self.get_starting_lineup(home)
-        pbp.to_csv("pbp.csv")
+        anti_zone = []
 
         def substitution(in_player, off_player):
             nonlocal current_lineup
-            if type(off_player) == float:
-                print(f"problem:{off_player}")
+            nonlocal anti_zone
 
             current_lineup = [*current_lineup, *in_player]
 
             for x in off_player:
-                current_lineup.remove(x)
+                try:
+                    current_lineup.remove(x)
+                    if len(anti_zone) > 0:
+                        current_lineup.remove(anti_zone.pop())
+
+                except ValueError:
+                    anti_zone.append(x)
 
             return tuple(current_lineup)
 
@@ -113,7 +130,10 @@ class GameData:
         lineups = ()
 
         for idx, tup in enumerate(zip(subs_df["PLAYER_ID_IN"], subs_df["PLAYER_ID_OUT"])):
-            lineups = lineups + (substitution(tup[0], tup[1]),)
+            try:
+                lineups = lineups + (substitution(tup[0], tup[1]),)
+            except ValueError as err:
+                pbp.to_csv("pbp.csv")
 
         lineups = list(lineups)
         subs_df["lineups"] = pd.Series([sorted(list(x)) for x in lineups])
@@ -182,8 +202,10 @@ class GameData:
                      "assisted_ft", "and_one_2fg", "and_one_3fg", "pos"]
 
         stat_dict = {x: "sum" for x in stat_keys}
-
-        df_lineups["lineups_string"] = df_lineups["lineups"].apply(lambda x: "; ".join(x))
+        try:
+            df_lineups["lineups_string"] = df_lineups["lineups"].apply(lambda x: "; ".join(x))
+        except TypeError as err:
+            df_lineups.to_csv("test.csv")
 
         df = df_lineups.groupby(["lineups_string", "CODETEAM", "index_left", "index_right"]).agg(
             stat_dict).reset_index()
@@ -289,8 +311,11 @@ class GameData:
 
         player_df_list = []
         for idx, x in enumerate(df["PLAYER_ID"]):
-            player_df_list.append(lineup.loc[lineup["lineups_string"].str.contains(x), :])
-            player_df_list[idx].loc[:, "PLAYER_ID"] = x
+            dfx = lineup.loc[lineup["lineups_string"].str.contains(x), :].copy()
+            # dfx.is_copy = None
+            if dfx.shape[0] > 0:
+                dfx["PLAYER_ID"] = x
+                player_df_list.append(dfx)
 
         stat_keys_extended = stat_keys + [f"opp_{x}" for x in stat_keys]
         stat_keys_extended.insert(0, "duration")
@@ -370,7 +395,7 @@ class GameData:
         self.calculate_team_stats()
 
         self.replace_player_ids()
-        pass
+
 
 
 @dataclass
@@ -392,19 +417,19 @@ class SeasonData:
         self.game_list = [GameData.from_dict(x) for x in game_list]
 
     def concatenate_player_data(self):
-        player_data_list = [x for x in self.game_list.home_players_processed] + [x for x in
-                                                                                 self.game_list.away_players_processed]
+        player_data_list = [x.home_players_processed for x in self.game_list] + [x.away_players_processed for x in
+                                                                                 self.game_list]
         self.player_data = pd.concat(player_data_list)
 
     def concatenate_lineup_data(self):
-        lineup_data_list = [x for x in self.game_list.lineups_home] + [x for x in
-                                                                       self.game_list.lineups_away]
+        lineup_data_list = [x.lineups_home for x in self.game_list] + [x.lineups_away for x in
+                                                                       self.game_list]
         self.lineup_data = pd.concat(lineup_data_list)
         pass
 
     def concatenate_team_data(self):
-        team_data_list = [x for x in self.game_list.team_stats]
-        self.lineup_data = pd.concat(team_data_list)
+        team_data_list = [x.team_stats for x in self.game_list]
+        self.team_data = pd.concat(team_data_list)
         pass
 
     def aggregate_player_data(self):
