@@ -45,13 +45,25 @@ class GameData:
         self.play_by_play = self.play_by_play.groupby("time").apply(lambda x: x.sort_values("PLAYTYPE")).reset_index(
             drop=True)
 
-        return self.play_by_play.loc[self.play_by_play["CODETEAM"].str.contains(team), :].reset_index().rename(
+        def swap_rows(df, row1, row2):
+            df.iloc[row1, :], df.iloc[row2, :] = df.iloc[row2, :].copy(), df.iloc[row1, :].copy()
+            return df
+
+        end_game_check = self.play_by_play.iloc[-1]["PLAYTYPE"] == "EG"
+        if end_game_check is False:
+            idx = self.play_by_play.index.values[self.play_by_play['PLAYTYPE'] == "EG"][0]
+            self.play_by_play = swap_rows(self.play_by_play, -1, idx).reset_index(drop=True)
+            pass
+
+        check_team = self.play_by_play["CODETEAM"].str.contains(team).tolist()
+        return self.play_by_play.loc[check_team, :].reset_index().rename(
             columns={"index": "index_pbp"})
 
     def get_starting_lineup(self, home=True):
         players = self.home_players if home else self.away_players
-        players = players.loc[players["st"] == 1, :]
-        return sorted(list(players["ac"]))
+        players = players.loc[(players["st"] == 1) & (players["sl"] == 1) & (players["nn"] == 1), :].drop_duplicates(subset=["ac"], keep=False)
+        starting_lineup = sorted(list(players["ac"]))
+        return starting_lineup
 
     def get_lineups(self, home=True):
         pbp = self.get_pbp(home)
@@ -70,7 +82,7 @@ class GameData:
         out_player = out_player.groupby('time').agg(
             {"PLAYER_ID_OUT": lambda x: list(x), "index_out": lambda x: list(x)}).reset_index()
 
-        subs_df = pd.concat([inc_player, out_player], axis=1)
+        subs_df = pd.concat([inc_player, out_player], axis=1).copy()
 
         def length_finder(x):
             if type(x) == list:
@@ -85,7 +97,6 @@ class GameData:
         subs_df_check = [length_finder(x) == length_finder(y) for x, y in zip(
             subs_df["PLAYER_ID_OUT"], subs_df["PLAYER_ID_IN"])]
 
-        # TODO do it for the case where there could be multiple such inconsistencies.
         if all(subs_df_check) is False:
             subs_df_test = subs_df.loc[~pd.Series(subs_df_check), :]
             in_row = subs_df_test["PLAYER_ID_IN"].explode().dropna().tolist()
@@ -96,11 +107,10 @@ class GameData:
 
             idx = min(subs_df_test.loc[:, "PLAYER_ID_IN"].index)
 
-            with pd.option_context('mode.copy_on_write', True):
-                subs_df.loc[:, "PLAYER_ID_IN"][idx] = in_row
-                subs_df.loc[:, "PLAYER_ID_OUT"][idx] = out_row
-                subs_df.loc[:, "index_inc"][idx] = in_row_idx
-                subs_df.loc[:, "index_out"][idx] = out_row_idx
+            subs_df.loc[:, "PLAYER_ID_IN"][idx] = in_row
+            subs_df.loc[:, "PLAYER_ID_OUT"][idx] = out_row
+            subs_df.loc[:, "index_inc"][idx] = in_row_idx
+            subs_df.loc[:, "index_out"][idx] = out_row_idx
 
             subs_df = subs_df.dropna()
 
@@ -108,11 +118,15 @@ class GameData:
 
         current_lineup = self.get_starting_lineup(home)
         anti_zone = []
+        prev_lineup = current_lineup
 
         def substitution(in_player, off_player):
             nonlocal current_lineup
             nonlocal anti_zone
+            nonlocal prev_lineup
 
+            err_count = 0
+            prev_lineup = current_lineup
             current_lineup = [*current_lineup, *in_player]
 
             for x in off_player:
@@ -120,11 +134,15 @@ class GameData:
                     current_lineup.remove(x)
                     if len(anti_zone) > 0:
                         current_lineup.remove(anti_zone.pop())
-
+                        prev_lineup = current_lineup
                 except ValueError:
                     anti_zone.append(x)
+                    err_count += 1
 
-            return tuple(current_lineup)
+            if err_count > 0:
+                return tuple(prev_lineup)
+            else:
+                return tuple(current_lineup)
 
         # because tuples are immutable
         lineups = ()
@@ -159,6 +177,7 @@ class GameData:
         pbp["index_left"] = pd.Series([x[0] for x in left_right_indices])
         pbp["index_right"] = pd.Series([x[1] for x in left_right_indices])
         pbp["OPP"] = self.away_team if home else self.home_team
+        pbp["lineup_length"] = pbp["lineups"].apply(lambda x: len(x))
 
         return pbp
 
@@ -220,7 +239,7 @@ class GameData:
             str)
         df_lineups_opp["game_epochs"] = pd.cut(df_lineups_opp["time"], game_epochs).astype(str)
 
-        df = df_lineups.groupby(["game_epochs", "lineups_string", "CODETEAM", "OPP"]).agg(
+        df = df_lineups.groupby(["game_epochs", "lineups_string", "CODETEAM", "OPP", "lineup_length"]).agg(
             stat_dict).reset_index()
 
         df = df.loc[df["duration"] != 0, :]
@@ -395,7 +414,6 @@ class GameData:
         self.calculate_team_stats()
 
         self.replace_player_ids()
-
 
 
 @dataclass
