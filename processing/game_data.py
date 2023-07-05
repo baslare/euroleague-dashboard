@@ -373,11 +373,17 @@ class GameData:
         home_stats["opp_points_scored"] = away_stats["points_scored"]
         away_stats["opp_points_scored"] = home_stats["points_scored"]
 
-        home_stats["win"] = home_stats["points_scored"] > home_stats["opp_points_scored"]
-        away_stats["win"] = away_stats["points_scored"] > away_stats["opp_points_scored"]
+        home_stats["win"] = (home_stats["points_scored"] > home_stats["opp_points_scored"]).astype(int)
+        away_stats["win"] = away_stats["points_scored"] > away_stats["opp_points_scored"].astype(int)
 
-        home_stats["home"] = self.home_team == home_stats["CODETEAM"]
-        away_stats["home"] = self.home_team != home_stats["CODETEAM"]
+        home_stats["home"] = True
+        away_stats["home"] = False
+
+        home_stats["home_win"] = home_stats["win"]
+        home_stats["away_win"] = 0
+        away_stats["home_win"] = 0
+        away_stats["away_win"] = away_stats["win"]
+
 
         self.team_stats = pd.concat([home_stats, away_stats])
         self.team_stats["game_code"] = self.game_code
@@ -451,10 +457,66 @@ class SeasonData:
         pass
 
     def aggregate_player_data(self):
+        self.player_data["game_count"] = 1
+        numeric_columns = self.player_data.select_dtypes(include=np.number).columns.tolist()
+
+        cols_to_average = [x for x in numeric_columns if re.search("_ratio", x)]
+        cols_to_sum = [x for x in numeric_columns if not re.search("_ratio", x)]
+
+        cols_dict = {x: "sum" for x in cols_to_sum} | {x: "mean" for x in cols_to_average}
+
+        self.player_data_agg = self.player_data.groupby(["PLAYER_ID", "playerName", "CODETEAM"]).agg(cols_dict)
+        self.player_data_agg = self.player_data_agg.reset_index()
+
+        df_averages = pd.DataFrame({
+            f"{x}_avg": self.player_data_agg[x] / self.player_data_agg["game_count"] for x in cols_to_sum})
+
+        self.player_data_agg = self.player_data_agg.join(df_averages)
+        self.player_data_agg["2FGP"] = self.player_data_agg["2FGM"]/self.player_data_agg["2FGA"]
+        self.player_data_agg["3FGR"] = self.player_data_agg["3FGM"] / self.player_data_agg["3FGA"]
+        self.player_data_agg["FTR"] = self.player_data_agg["FTM"] / self.player_data_agg["FTA"]
+        pass
+
+    def aggregate_player_data_average_based(self):
+
         pass
 
     def aggregate_lineup_data(self):
+        self.lineup_data["game_count"] = 1
+        numeric_columns = self.lineup_data.select_dtypes(include=np.number).columns.tolist()
+
+        cols_to_sum = [x for x in numeric_columns]
+        cols_dict = {x: "sum" for x in cols_to_sum}
+
+        self.lineup_data_agg = self.lineup_data.groupby(["lineups_string", "lineups", "CODETEAM"]).agg(cols_dict)
+        self.lineup_data_agg = self.lineup_data_agg.reset_index()
+
+        df_averages = pd.DataFrame({
+            f"{x}_avg": self.lineup_data_agg[x] / self.lineup_data_agg["game_count"] for x in cols_to_sum})
+
+        self.lineup_data_agg = self.lineup_data_agg.join(df_averages)
+        self.lineup_data_agg["2FGR"] = self.lineup_data_agg["2FGM"] / self.lineup_data_agg["2FGA"]
+        self.lineup_data_agg["3FGR"] = self.lineup_data_agg["3FGM"] / self.lineup_data_agg["3FGA"]
+        self.lineup_data_agg["FTR"] = self.lineup_data_agg["FTM"] / self.lineup_data_agg["FTA"]
+
+        self.lineup_data_agg
+
         pass
 
     def aggregate_team_data(self):
+        self.team_data["game_count"] = 1
+        numeric_columns = self.team_data.select_dtypes(include=np.number).columns.tolist()
+        cols_to_sum = [x for x in numeric_columns]
+        cols_dict = {x: "sum" for x in cols_to_sum}
+        self.team_data_agg = self.team_data.groupby(["CODETEAM"]).agg(cols_dict)
+        self.team_data_agg = self.team_data_agg.reset_index()
+
+        df_averages = pd.DataFrame({
+            f"{x}_avg": self.team_data_agg[x] / self.team_data_agg["game_count"] for x in cols_to_sum})
+
+        self.team_data_agg = self.team_data_agg.join(df_averages)
+        self.team_data_agg["2FGR"] = self.team_data_agg["2FGM"] / self.team_data_agg["2FGA"]
+        self.team_data_agg["3FGR"] = self.team_data_agg["3FGM"] / self.team_data_agg["3FGA"]
+        self.team_data_agg["FTR"] = self.team_data_agg["FTM"] / self.team_data_agg["FTA"]
+
         pass

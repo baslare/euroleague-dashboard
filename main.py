@@ -36,6 +36,10 @@ if __name__ == '__main__':
     season_instance.concatenate_team_data()
     season_instance.concatenate_player_data()
 
+    season_instance.aggregate_lineup_data()
+    season_instance.aggregate_team_data()
+    season_instance.aggregate_player_data()
+
     client = pymongo.MongoClient("mongodb://root:password@mongo:27017/")
 
     db = client["euroleague_dashboard"]
@@ -47,3 +51,12 @@ if __name__ == '__main__':
 
     teams = db["teams"]
     teams.insert_many(season_instance.team_data.to_dict("records"))
+
+    lineups_agg = db["lineups_agg"]
+    lineups_agg.insert_many(season_instance.lineup_data_agg.to_dict("records"))
+
+    players_agg = db["players_agg"]
+    players_agg.insert_many(season_instance.player_data_agg.to_dict("records"))
+
+    teams_agg = db["teams_agg"]
+    teams_agg.insert_many(season_instance.team_data_agg.to_dict("records"))
