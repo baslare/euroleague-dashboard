@@ -136,7 +136,7 @@ class ELAPI:
         query_url = f"https://feeds.incrowdsports.com/provider/euroleague-feeds/v2/competitions/E/seasons/E{season}/games?"
 
         if season == 2019:
-            params = {"phaseTypeCode":"RS"}
+            params = {"phaseTypeCode": "RS"}
         else:
             params = {"phaseTypeCode": "FF"}
 
@@ -154,7 +154,7 @@ class ELAPI:
             req = req.json().get("data")
             codes_list = [x.get("code") for x in req]
             return max(codes_list)
-        except json.JSONDecodeError as err:
+        except json.JSONDecodeError:
             return -1
 
     def get_season_stats(self, season, game=1):

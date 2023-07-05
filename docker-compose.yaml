@@ -10,6 +10,8 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: password
+    volumes:
+      - mongodb:/home/volumes/mongodb
     networks:
       - app-tier
   python_euroleague:
@@ -26,6 +28,24 @@ services:
     command:
       python main.py
 
+  euroleague-api:
+    build:
+      context: ../euroleague-dashboard-api
+      dockerfile: ./Dockerfile
+    depends_on:
+      - python_euroleague
+    command: bash -c "
+      uvicorn app.main:app
+      --host 0.0.0.0 --port 8989
+      --reload
+      "
+    networks:
+      - app-tier
+    ports:
+      - "8989:8989"
 networks:
   app-tier:
     driver: bridge
+
+volumes:
+  mongodb:
