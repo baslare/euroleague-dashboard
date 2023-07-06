@@ -26,7 +26,7 @@ services:
     networks:
       - app-tier
     command:
-      python main.py
+      python main.py 2022
 
   euroleague-api:
     build:

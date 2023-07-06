@@ -61,7 +61,8 @@ class GameData:
 
     def get_starting_lineup(self, home=True):
         players = self.home_players if home else self.away_players
-        players = players.loc[(players["st"] == 1) & (players["sl"] == 1) & (players["nn"] == 1), :].drop_duplicates(subset=["ac"], keep=False)
+        players = players.loc[(players["st"] == 1) & (players["sl"] == 1) & (players["nn"] == 1), :].drop_duplicates(
+            subset=["ac"], keep=False)
         starting_lineup = sorted(list(players["ac"]))
         return starting_lineup
 
@@ -249,6 +250,7 @@ class GameData:
         df_opp = df_opp.rename(columns=rename_dict)
 
         df = df.merge(df_opp, how="left", on="game_epochs")
+        df["game_code"] = self.game_code
 
         if home:
             self.lineups_home = df
@@ -384,7 +386,6 @@ class GameData:
         away_stats["home_win"] = 0
         away_stats["away_win"] = away_stats["win"]
 
-
         self.team_stats = pd.concat([home_stats, away_stats])
         self.team_stats["game_code"] = self.game_code
 
@@ -444,16 +445,19 @@ class SeasonData:
         player_data_list = [x.home_players_processed for x in self.game_list] + [x.away_players_processed for x in
                                                                                  self.game_list]
         self.player_data = pd.concat(player_data_list)
+        self.player_data["season"] = self.season
 
     def concatenate_lineup_data(self):
         lineup_data_list = [x.lineups_home for x in self.game_list] + [x.lineups_away for x in
                                                                        self.game_list]
         self.lineup_data = pd.concat(lineup_data_list)
+        self.lineup_data["season"] = self.season
         pass
 
     def concatenate_team_data(self):
         team_data_list = [x.team_stats for x in self.game_list]
         self.team_data = pd.concat(team_data_list)
+        self.team_data["season"] = self.season
         pass
 
     def aggregate_player_data(self):
@@ -467,18 +471,18 @@ class SeasonData:
 
         self.player_data_agg = self.player_data.groupby(["PLAYER_ID", "playerName", "CODETEAM"]).agg(cols_dict)
         self.player_data_agg = self.player_data_agg.reset_index()
+        self.player_data_agg["season"] = self.season
 
         df_averages = pd.DataFrame({
             f"{x}_avg": self.player_data_agg[x] / self.player_data_agg["game_count"] for x in cols_to_sum})
 
         self.player_data_agg = self.player_data_agg.join(df_averages)
-        self.player_data_agg["2FGP"] = self.player_data_agg["2FGM"]/self.player_data_agg["2FGA"]
+        self.player_data_agg["2FGP"] = self.player_data_agg["2FGM"] / self.player_data_agg["2FGA"]
         self.player_data_agg["3FGR"] = self.player_data_agg["3FGM"] / self.player_data_agg["3FGA"]
         self.player_data_agg["FTR"] = self.player_data_agg["FTM"] / self.player_data_agg["FTA"]
         pass
 
     def aggregate_player_data_average_based(self):
-
         pass
 
     def aggregate_lineup_data(self):
@@ -499,7 +503,7 @@ class SeasonData:
         self.lineup_data_agg["3FGR"] = self.lineup_data_agg["3FGM"] / self.lineup_data_agg["3FGA"]
         self.lineup_data_agg["FTR"] = self.lineup_data_agg["FTM"] / self.lineup_data_agg["FTA"]
 
-        self.lineup_data_agg
+        self.lineup_data_agg["season"] = self.season
 
         pass
 
@@ -518,5 +522,6 @@ class SeasonData:
         self.team_data_agg["2FGR"] = self.team_data_agg["2FGM"] / self.team_data_agg["2FGA"]
         self.team_data_agg["3FGR"] = self.team_data_agg["3FGM"] / self.team_data_agg["3FGA"]
         self.team_data_agg["FTR"] = self.team_data_agg["FTM"] / self.team_data_agg["FTA"]
+        self.team_data_agg["season"] = self.season
 
         pass

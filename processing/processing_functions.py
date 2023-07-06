@@ -22,17 +22,16 @@ def make_pbp_df(pbp_data: dict) -> pd.DataFrame:
                                                 np.where(pbp_quarters["MINUTE"] <= 50, 6,
                                                          np.where(pbp_quarters["MINUTE"] <= 55, 7, 8))))
 
-    pbp_quarters = pbp_quarters.loc[pbp_quarters["MARKERTIME"].str.contains(":"),:]
+    pbp_quarters = pbp_quarters.loc[pbp_quarters["MARKERTIME"].str.contains(":"), :]
     pbp_quarters[["min", "sec"]] = pbp_quarters["MARKERTIME"].str.split(":", expand=True)
-
-
 
     pbp_quarters["min"] = pbp_quarters["min"].astype(int)
     pbp_quarters["sec"] = pbp_quarters["sec"].fillna("00").astype(int)
 
     pbp_quarters['time'] = np.where(pbp_quarters["Quarter"] <= 4,
-                                    (pbp_quarters["Quarter"]) * 600 - pbp_quarters["min"]*60 - pbp_quarters["sec"],
-                                    2400 + (pbp_quarters["Quarter"] - 4)*300 - (pbp_quarters["min"]*60 + pbp_quarters["sec"]))
+                                    (pbp_quarters["Quarter"]) * 600 - pbp_quarters["min"] * 60 - pbp_quarters["sec"],
+                                    2400 + (pbp_quarters["Quarter"] - 4) * 300 - (
+                                                pbp_quarters["min"] * 60 + pbp_quarters["sec"]))
 
     pbp_quarters = pbp_quarters.sort_values("time")
 
@@ -43,7 +42,7 @@ def make_pbp_df(pbp_data: dict) -> pd.DataFrame:
     pbp_quarters["CODETEAM"] = pbp_quarters["CODETEAM"].str.replace(" ", "")
     pbp_quarters["PLAYER_ID"] = pbp_quarters["PLAYER_ID"].str.replace(" ", "")
     pbp_quarters["PLAYTYPE"] = pbp_quarters["PLAYTYPE"].str.replace(" ", "")
-    pbp_quarters.loc[pbp_quarters["playerIn"],"PLAYTYPE"] = "ZZ IN"
+    pbp_quarters.loc[pbp_quarters["playerIn"], "PLAYTYPE"] = "ZZ IN"
     pbp_quarters.loc[pbp_quarters["playerOut"], "PLAYTYPE"] = "ZZ OUT"
 
     return pbp_quarters.reset_index(drop=True)

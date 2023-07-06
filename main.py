@@ -1,25 +1,33 @@
 import json
-import pymongo
 from tqdm.auto import tqdm
-import processing.processing_functions
+from processing.db_connection import MongoConnectionSeason
 from processing.game_data import SeasonData
 from el_api_wrapper import ELAPI
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("season", help="euroleague season to process", type=int)
+parser.add_argument("--download", help="flag to tell if the season data should be downloaded, looks for a file in dir "
+                                       "otherwise", action="store_true")
+args = parser.parse_args()
+
 
 if __name__ == '__main__':
     el = ELAPI()
 
-    loading = True
+    loading = not args.download
+    season = args.season
+    season_instance = SeasonData(season)
 
     if loading:
-        season_instance = SeasonData(2022)
-        with open("season.json", "r") as file:
+
+        with open(f"season_{season}.json", "r") as file:
             season_game_list = json.load(file)
 
     else:
-        season_instance = SeasonData(2022)
         season_game_list = el.get_season_stats(season_instance.season)
-        # with open("season.json", "w") as file:
-            # json.dump(season_game_list, file)
+        with open(f"season_{season}.json", "w") as file:
+            json.dump(season_game_list, file)
 
     season_instance.store_games_list(season_game_list)
 
@@ -40,23 +48,5 @@ if __name__ == '__main__':
     season_instance.aggregate_team_data()
     season_instance.aggregate_player_data()
 
-    client = pymongo.MongoClient("mongodb://root:password@mongo:27017/")
-
-    db = client["euroleague_dashboard"]
-    lineups = db["lineups"]
-    lineups.insert_many(season_instance.lineup_data.to_dict("records"))
-
-    players = db["players"]
-    players.insert_many(season_instance.player_data.to_dict("records"))
-
-    teams = db["teams"]
-    teams.insert_many(season_instance.team_data.to_dict("records"))
-
-    lineups_agg = db["lineups_agg"]
-    lineups_agg.insert_many(season_instance.lineup_data_agg.to_dict("records"))
-
-    players_agg = db["players_agg"]
-    players_agg.insert_many(season_instance.player_data_agg.to_dict("records"))
-
-    teams_agg = db["teams_agg"]
-    teams_agg.insert_many(season_instance.team_data_agg.to_dict("records"))
+    conn = MongoConnectionSeason(season_instance)
+    conn.insert_season()
