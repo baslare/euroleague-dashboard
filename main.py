@@ -43,6 +43,7 @@ if __name__ == '__main__':
     season_instance.concatenate_lineup_data()
     season_instance.concatenate_team_data()
     season_instance.concatenate_player_data()
+    season_instance.concatenate_points_data()
 
     season_instance.aggregate_lineup_data()
     season_instance.aggregate_team_data()

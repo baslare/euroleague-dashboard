@@ -1,4 +1,3 @@
-import json
 from dataclasses import dataclass
 from dataclasses_json import dataclass_json
 from processing.processing_functions import make_pbp_df, make_players_df, make_points_df
@@ -58,6 +57,17 @@ class GameData:
         check_team = self.play_by_play["CODETEAM"].str.contains(team).tolist()
         return self.play_by_play.loc[check_team, :].reset_index().rename(
             columns={"index": "index_pbp"})
+
+    def get_points_data(self):
+
+        df = self.points
+        df["season"] = self.season
+        df["OPP"] = np.where(df["TEAM"] == self.home_team, self.away_team, self.home_team)
+        df["missed"] = df["ID_ACTION"].isin(["2FGA", "3FGA"])
+        df = df[["ID_PLAYER", "TEAM", "OPP", "season", "PLAYER", "ID_ACTION", "COORD_X", "COORD_Y", "ZONE", "missed"]]
+        df["game_code"] = self.game_code
+        self.points = df.loc[~df["ID_ACTION"].isin(["FTM", "FTA"]), :]
+
 
     def get_starting_lineup(self, home=True):
         players = self.home_players if home else self.away_players
@@ -422,6 +432,8 @@ class GameData:
 
         self.replace_player_ids()
 
+        self.get_points_data()
+
 
 @dataclass
 class SeasonData:
@@ -433,6 +445,7 @@ class SeasonData:
     player_data_agg: pd.DataFrame
     lineup_data_agg: pd.DataFrame
     team_data_agg: pd.DataFrame
+    points_data: pd.DataFrame
 
     def __init__(self, season):
         self.season = season
@@ -459,6 +472,10 @@ class SeasonData:
         self.team_data = pd.concat(team_data_list)
         self.team_data["season"] = self.season
         pass
+
+    def concatenate_points_data(self):
+        points_data_list = [x.points for x in self.game_list]
+        self.points_data = pd.concat(points_data_list)
 
     def aggregate_player_data(self):
         self.player_data["game_count"] = 1
