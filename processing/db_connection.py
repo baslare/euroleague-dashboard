@@ -38,6 +38,7 @@ class MongoConnectionSeason:
         self.lineups_agg = self.db["lineups_agg"]
         self.players_agg = self.db["players_agg"]
         self.teams_agg = self.db["teams_agg"]
+        self.points_agg = self.db["points_agg"]
 
     def insert_season(self):
         self.lineups.insert_many(self.season_data.lineup_data.to_dict("records"))
@@ -47,3 +48,4 @@ class MongoConnectionSeason:
         self.lineups_agg.insert_many(self.season_data.lineup_data_agg.to_dict("records"))
         self.players_agg.insert_many(self.season_data.player_data_agg.to_dict("records"))
         self.teams_agg.insert_many(self.season_data.team_data_agg.to_dict("records"))
+        self.points_agg.insert_many(self.season_data.points_data.to_dict("records"))

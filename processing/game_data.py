@@ -68,7 +68,6 @@ class GameData:
         df["game_code"] = self.game_code
         self.points = df.loc[~df["ID_ACTION"].isin(["FTM", "FTA"]), :]
 
-
     def get_starting_lineup(self, home=True):
         players = self.home_players if home else self.away_players
         players = players.loc[(players["st"] == 1) & (players["sl"] == 1) & (players["nn"] == 1), :].drop_duplicates(
@@ -188,7 +187,6 @@ class GameData:
         pbp["index_left"] = pd.Series([x[0] for x in left_right_indices])
         pbp["index_right"] = pd.Series([x[1] for x in left_right_indices])
         pbp["OPP"] = self.away_team if home else self.home_team
-        pbp["lineup_length"] = pbp["lineups"].apply(lambda x: len(x))
 
         return pbp
 
@@ -232,10 +230,8 @@ class GameData:
                      "assisted_ft", "and_one_2fg", "and_one_3fg", "pos"]
 
         stat_dict = {x: "sum" for x in stat_keys}
-        try:
-            df_lineups["lineups_string"] = df_lineups["lineups"].apply(lambda x: "; ".join(x))
-        except TypeError as err:
-            df_lineups.to_csv("test.csv")
+
+        df_lineups["lineups_string"] = df_lineups["lineups"].apply(lambda x: "; ".join(x))
 
         df = df_lineups.groupby(["lineups_string", "CODETEAM", "index_left", "index_right"]).agg(
             stat_dict).reset_index()
@@ -250,7 +246,7 @@ class GameData:
             str)
         df_lineups_opp["game_epochs"] = pd.cut(df_lineups_opp["time"], game_epochs).astype(str)
 
-        df = df_lineups.groupby(["game_epochs", "lineups_string", "CODETEAM", "OPP", "lineup_length"]).agg(
+        df = df_lineups.groupby(["game_epochs", "lineups_string", "CODETEAM", "OPP"]).agg(
             stat_dict).reset_index()
 
         df = df.loc[df["duration"] != 0, :]
