@@ -65,7 +65,7 @@ class GameData:
         df["OPP"] = np.where(df["TEAM"] == self.home_team, self.away_team, self.home_team)
         df["missed"] = df["ID_ACTION"].isin(["2FGA", "3FGA"])
         df = df[["ID_PLAYER", "TEAM", "OPP", "season", "PLAYER", "ID_ACTION", "COORD_X", "COORD_Y", "ZONE", "missed"]]
-        df["game_code"] = self.game_code
+        df.loc[:, "game_code"] = self.game_code
         self.points = df.loc[~df["ID_ACTION"].isin(["FTM", "FTA"]), :]
 
     def get_starting_lineup(self, home=True):
@@ -271,50 +271,75 @@ class GameData:
         def finder(row):
             if len(row) > 1:
                 multi_ft = sum([bool(re.match("FT", a)) for a in row]) > 1
-                assisted_2fg = all([item in row for item in ["2FGM", "AS"]])
-                assisted_3fg = all([item in row for item in ["3FGM", "AS"]])
-                assisted_ft = multi_ft and "AS" in row
                 and_one_2fg = all([item in row for item in ["2FGM", "RV"]]) and any(
                     [bool(re.match("FT", a)) for a in row])
                 and_one_3fg = all([item in row for item in ["3FGM", "RV"]]) and any(
                     [bool(re.match("FT", a)) for a in row])
 
                 return {"multi_ft": multi_ft,
-                        "assisted_2fg": assisted_2fg,
-                        "assisted_3fg": assisted_3fg,
-                        "assisted_ft": assisted_ft,
                         "and_one_2fg": and_one_2fg,
                         "and_one_3fg": and_one_3fg}
             else:
                 return {"multi_ft": False,
-                        "assisted_2fg": False,
-                        "assisted_3fg": False,
-                        "assisted_ft": False,
                         "and_one_2fg": False,
                         "and_one_3fg": False}
 
         pbp_sub["extra_stats"] = pbp_sub["PLAYTYPE"].apply(lambda x: finder(x))
         pbp_sub2 = pd.json_normalize(pbp_sub["extra_stats"])
+        pbp_sub3 = pbp.loc[pbp["PLAYTYPE"].isin(["2FGM", "3FGM", "AS", "FTM"]), ["PLAYER_ID", "PLAYTYPE"]]
+
+        assist_check_df = pbp_sub3[["PLAYER_ID","PLAYTYPE"]].iloc[1:, :].reset_index(
+
+        ).rename(columns={"index": "index_row_right"})
+
+        pbp_sub3["index_row_left"] = pbp_sub3.index
+
+        pbp_sub3["index_row_right"] = assist_check_df["index_row_right"].tolist() + [np.inf]
+        pbp_sub3["check"] = assist_check_df["PLAYTYPE"].tolist() + [np.inf]
+        pbp_sub3["PLAYER_ID_right"] = assist_check_df["PLAYER_ID"].tolist() + [""]
+        pbp_sub3["assisted_2fg"] = (pbp_sub3["PLAYTYPE"] == "2FGM") & (
+                pbp_sub3["check"] == "AS") & (np.abs(pbp_sub3["index_row_left"] - pbp_sub3["index_row_right"]) == 1)
+        pbp_sub3["assisted_3fg"] = (pbp_sub3["PLAYTYPE"] == "3FGM") & (
+                pbp_sub3["check"] == "AS") & (np.abs(pbp_sub3["index_row_left"] - pbp_sub3["index_row_right"]) == 1)
+        pbp_sub3["assisted_ft"] = (pbp_sub3["PLAYTYPE"] == "AS") & (
+                pbp_sub3["check"] == "FTM") & (np.abs(pbp_sub3["index_row_left"] - pbp_sub3["index_row_right"]) == 1)
+
+        # fix assisted ft assisting player names
+        assisted_ft_idx = pbp_sub3.loc[pbp_sub3["assisted_ft"],["index_row_left","index_row_right"]]
+        for left_index, right_index in zip(assisted_ft_idx["index_row_left"], assisted_ft_idx["index_row_right"]):
+            pbp_sub3.loc[right_index, "PLAYER_ID_right"] = pbp_sub3.loc[left_index, "PLAYER_ID"]
+            pbp_sub3.loc[left_index,"assisted_ft"], pbp_sub3.loc[right_index,"assisted_ft"] = pbp_sub3.loc[right_index,"assisted_ft"], pbp_sub3.loc[left_index,"assisted_ft"]
+
+        pbp_sub3.loc[~(pbp_sub3["assisted_2fg"] | pbp_sub3["assisted_3fg"] | pbp_sub3["assisted_ft"]),"PLAYER_ID_right"] = np.nan
+
         pbp_sub = pbp_sub.drop("extra_stats", axis=1)
         pbp_sub = pd.concat([pbp_sub, pbp_sub2], axis=1)
-
-        pbp_sub["check"] = pbp_sub["PLAYTYPE"].iloc[1:].reset_index(drop=True)
         pbp_sub.loc[pbp_sub.shape[0] - 1, "check"] = ["EG"]
-        as2_check = ["2FGM" in x and "AS" in y for x, y in zip(pbp_sub["PLAYTYPE"], pbp_sub["check"])]
-        as3_check = ["3FGM" in x and "AS" in y for x, y in zip(pbp_sub["PLAYTYPE"], pbp_sub["check"])]
-
-        pbp_sub["assisted_2fg"] = pbp_sub["assisted_2fg"] | as2_check
-        pbp_sub["assisted_3fg"] = pbp_sub["assisted_3fg"] | as3_check
-
         pbp_sub = pbp_sub.drop(["PLAYTYPE", "check"], axis=1)
         mask = pbp["time"].duplicated()
+
         col_names = [str(x) for x in pbp_sub.columns]
         pbp = pbp.merge(pbp_sub, how="left", on="time")
-        pbp.loc[mask, col_names[1:]] = False
+        pbp["multi_ft"] = pbp["multi_ft"] & pbp["FTA"]
+        pbp.loc[mask, col_names[2:]] = False
+
+        ft_mask = pbp[["FTA", "time"]].duplicated()
+        pbp.loc[ft_mask, "multi_ft"] = False
+
+        pbp["assisted_2fg"] = pbp_sub3["assisted_2fg"]
+        pbp["assisted_3fg"] = pbp_sub3["assisted_3fg"]
+        pbp["assisted_ft"] = pbp_sub3["assisted_ft"]
+
+        pbp["assisted_2fg"].fillna(False, inplace=True)
+        pbp["assisted_3fg"].fillna(False, inplace=True)
+        pbp["assisted_ft"].fillna(False, inplace=True)
+
+        pbp.loc[:, "assisted_ft"] = pbp["multi_ft"] & pbp["assisted_ft"]
+        pbp["assisting_player"] = pbp_sub3["PLAYER_ID_right"]
 
         pbp["pos"] = pbp["multi_ft"].astype(int) + pbp["2FGA"].astype(int) + pbp["3FGA"].astype(int) + pbp["TO"].astype(
             int) - pbp["O"].astype(int)
-
+        pass
         if home:
             self.pbp_processed_home = pbp
         else:
