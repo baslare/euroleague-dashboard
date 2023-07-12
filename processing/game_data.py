@@ -37,6 +37,9 @@ class GameData:
         self.home_players_processed: pd.DataFrame
         self.away_players_processed: pd.DataFrame
 
+        self.assists_home = pd.DataFrame
+        self.assists_away = pd.DataFrame
+
         self.team_stats: pd.DataFrame
 
     def get_pbp(self, home=True):
@@ -62,10 +65,15 @@ class GameData:
 
         df = self.points
         df["season"] = self.season
-        df["OPP"] = np.where(df["TEAM"] == self.home_team, self.away_team, self.home_team)
+        df.loc[:, "TEAM"] = df["TEAM"].str.replace(" ", "")
+        df.loc[:, "ID_PLAYER"] = df["ID_PLAYER"].str.replace(" ", "")
+        df["OPP"] = df["TEAM"].apply(lambda x: self.away_team if x == self.home_team else self.home_team)
         df["missed"] = df["ID_ACTION"].isin(["2FGA", "3FGA"])
-        df = df[["ID_PLAYER", "TEAM", "OPP", "season", "PLAYER", "ID_ACTION", "COORD_X", "COORD_Y", "ZONE", "missed"]]
+        df = df[["ID_PLAYER", "TEAM", "OPP", "season", "PLAYER", "ID_ACTION", "COORD_X", "COORD_Y", "ZONE",
+                 "missed"]].copy()
         df.loc[:, "game_code"] = self.game_code
+        df["x_new"] = df["COORD_X"] * 416 / 1500 + 218
+        df["y_new"] = df["COORD_Y"] * 776 / 2800 + 56
         self.points = df.loc[~df["ID_ACTION"].isin(["FTM", "FTA"]), :]
 
     def get_starting_lineup(self, home=True):
@@ -288,7 +296,7 @@ class GameData:
         pbp_sub2 = pd.json_normalize(pbp_sub["extra_stats"])
         pbp_sub3 = pbp.loc[pbp["PLAYTYPE"].isin(["2FGM", "3FGM", "AS", "FTM"]), ["PLAYER_ID", "PLAYTYPE"]]
 
-        assist_check_df = pbp_sub3[["PLAYER_ID","PLAYTYPE"]].iloc[1:, :].reset_index(
+        assist_check_df = pbp_sub3[["PLAYER_ID", "PLAYTYPE"]].iloc[1:, :].reset_index(
 
         ).rename(columns={"index": "index_row_right"})
 
@@ -305,12 +313,14 @@ class GameData:
                 pbp_sub3["check"] == "FTM") & (np.abs(pbp_sub3["index_row_left"] - pbp_sub3["index_row_right"]) == 1)
 
         # fix assisted ft assisting player names
-        assisted_ft_idx = pbp_sub3.loc[pbp_sub3["assisted_ft"],["index_row_left","index_row_right"]]
+        assisted_ft_idx = pbp_sub3.loc[pbp_sub3["assisted_ft"], ["index_row_left", "index_row_right"]]
         for left_index, right_index in zip(assisted_ft_idx["index_row_left"], assisted_ft_idx["index_row_right"]):
             pbp_sub3.loc[right_index, "PLAYER_ID_right"] = pbp_sub3.loc[left_index, "PLAYER_ID"]
-            pbp_sub3.loc[left_index,"assisted_ft"], pbp_sub3.loc[right_index,"assisted_ft"] = pbp_sub3.loc[right_index,"assisted_ft"], pbp_sub3.loc[left_index,"assisted_ft"]
+            pbp_sub3.loc[left_index, "assisted_ft"], pbp_sub3.loc[right_index, "assisted_ft"] = pbp_sub3.loc[
+                right_index, "assisted_ft"], pbp_sub3.loc[left_index, "assisted_ft"]
 
-        pbp_sub3.loc[~(pbp_sub3["assisted_2fg"] | pbp_sub3["assisted_3fg"] | pbp_sub3["assisted_ft"]),"PLAYER_ID_right"] = np.nan
+        pbp_sub3.loc[~(pbp_sub3["assisted_2fg"] | pbp_sub3["assisted_3fg"] | pbp_sub3[
+            "assisted_ft"]), "PLAYER_ID_right"] = np.nan
 
         pbp_sub = pbp_sub.drop("extra_stats", axis=1)
         pbp_sub = pd.concat([pbp_sub, pbp_sub2], axis=1)
@@ -389,6 +399,7 @@ class GameData:
         df["opp_pts"] = df["opp_FTM"] + 2 * df["opp_2FGM"] + 3 * df["opp_3FGM"]
         df["plus_minus"] = df["team_pts"] - df["opp_pts"]
         df["game_code"] = self.game_code
+        df["home"] = self.home_team == df["CODETEAM"]
 
         if home:
             self.home_players_processed = df
@@ -417,8 +428,37 @@ class GameData:
         away_stats["home_win"] = 0
         away_stats["away_win"] = away_stats["win"]
 
+        home_stats["2FGR"] = home_stats["2FGM"] / home_stats["2FGA"]
+        home_stats["3FGR"] = home_stats["3FGM"] / home_stats["3FGA"]
+        home_stats["FTR"] = home_stats["FTM"] / home_stats["FTA"]
+        home_stats["DRBEBR"] = home_stats["D"] / (home_stats["D"] + home_stats["opp_O"])
+        home_stats["ORBEBR"] = home_stats["O"] / (home_stats["O"] + home_stats["opp_D"])
+        home_stats["PPP"] = home_stats["points_scored"] / home_stats["pos"]
+
+        away_stats["2FGR"] = away_stats["2FGM"] / away_stats["2FGA"]
+        away_stats["3FGR"] = away_stats["3FGM"] / away_stats["3FGA"]
+        away_stats["FTR"] = away_stats["FTM"] / away_stats["FTA"]
+        away_stats["DRBEBR"] = away_stats["D"] / (away_stats["D"] + away_stats["opp_O"])
+        away_stats["ORBEBR"] = away_stats["O"] / (away_stats["O"] + away_stats["opp_D"])
+        away_stats["PPP"] = away_stats["points_scored"] / away_stats["pos"]
+
         self.team_stats = pd.concat([home_stats, away_stats])
         self.team_stats["game_code"] = self.game_code
+
+    def get_assist_data(self, home=True):
+        df = self.pbp_processed_home if home else self.pbp_processed_away
+        df_assists = df.loc[~df["assisting_player"].isna(), ["PLAYER_ID","assisting_player","CODETEAM","PLAYTYPE","time"]]
+        df_assists["OPP"] = self.away_team if home else self.home_team
+        df_assists["game_code"] = self.game_code
+        df_assists["season"] = self.season
+        df_assists.loc[:, "assisting_player"] = df_assists["assisting_player"].str.replace(" ", "")
+
+        if home:
+            self.assists_home = df_assists
+        else:
+            self.assists_away = df_assists
+
+        pass
 
     def replace_player_ids(self):
 
@@ -430,6 +470,12 @@ class GameData:
 
         self.lineups_home["lineups"] = self.lineups_home["lineups_string"].replace(home_dict, regex=True).str.title()
         self.lineups_away["lineups"] = self.lineups_away["lineups_string"].replace(away_dict, regex=True).str.title()
+
+        self.assists_home["playerName"] = self.assists_home["PLAYER_ID"].map(home_dict).str.title()
+        self.assists_away["playerName"] = self.assists_away["PLAYER_ID"].map(away_dict).str.title()
+
+        self.assists_home["playerNameAssisting"] = self.assists_home["assisting_player"].map(home_dict).str.title()
+        self.assists_away["playerNameAssisting"] = self.assists_away["assisting_player"].map(away_dict).str.title()
 
         pass
 
@@ -451,9 +497,13 @@ class GameData:
 
         self.calculate_team_stats()
 
+        self.get_points_data()
+
+        self.get_assist_data()
+        self.get_assist_data(home=False)
+
         self.replace_player_ids()
 
-        self.get_points_data()
 
 
 @dataclass
@@ -467,6 +517,7 @@ class SeasonData:
     lineup_data_agg: pd.DataFrame
     team_data_agg: pd.DataFrame
     points_data: pd.DataFrame
+    assists_data: pd.DataFrame
 
     def __init__(self, season):
         self.season = season
@@ -498,6 +549,10 @@ class SeasonData:
         points_data_list = [x.points for x in self.game_list]
         self.points_data = pd.concat(points_data_list)
 
+    def concatenate_assists_data(self):
+        assists_data_list = [x.assists_home for x in self.game_list] + [x.assists_away for x in self.game_list]
+        self.assists_data = pd.concat(assists_data_list)
+
     def aggregate_player_data(self):
         self.player_data["game_count"] = 1
         numeric_columns = self.player_data.select_dtypes(include=np.number).columns.tolist()
@@ -518,6 +573,8 @@ class SeasonData:
         self.player_data_agg["2FGP"] = self.player_data_agg["2FGM"] / self.player_data_agg["2FGA"]
         self.player_data_agg["3FGR"] = self.player_data_agg["3FGM"] / self.player_data_agg["3FGA"]
         self.player_data_agg["FTR"] = self.player_data_agg["FTM"] / self.player_data_agg["FTA"]
+
+        # TODO add advanced statistics here
         pass
 
     def aggregate_player_data_average_based(self):

@@ -25,8 +25,8 @@ services:
       - mongo
     networks:
       - app-tier
-    # command:
-      # python main.py 2022
+    command:
+      python main.py 2022
 
   euroleague-api:
     build:
@@ -45,6 +45,8 @@ services:
       - "8989:8989"
 
   dashboard:
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
     build:
       context: ../euroleague-dashboard-dash
       dockerfile: ./Dockerfile
