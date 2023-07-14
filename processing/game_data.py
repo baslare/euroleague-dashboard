@@ -74,6 +74,7 @@ class GameData:
         df.loc[:, "game_code"] = self.game_code
         df["x_new"] = df["COORD_X"] * 416 / 1500 + 218
         df["y_new"] = df["COORD_Y"] * 776 / 2800 + 56
+        df["home"] = np.where(df["TEAM"] == self.home_team, True, False)
         self.points = df.loc[~df["ID_ACTION"].isin(["FTM", "FTA"]), :]
 
     def get_starting_lineup(self, home=True):
@@ -447,11 +448,13 @@ class GameData:
 
     def get_assist_data(self, home=True):
         df = self.pbp_processed_home if home else self.pbp_processed_away
-        df_assists = df.loc[~df["assisting_player"].isna(), ["PLAYER_ID","assisting_player","CODETEAM","PLAYTYPE","time"]]
+        df_assists = df.loc[
+            ~df["assisting_player"].isna(), ["PLAYER_ID", "assisting_player", "CODETEAM", "PLAYTYPE", "time"]]
         df_assists["OPP"] = self.away_team if home else self.home_team
         df_assists["game_code"] = self.game_code
         df_assists["season"] = self.season
         df_assists.loc[:, "assisting_player"] = df_assists["assisting_player"].str.replace(" ", "")
+        df_assists["home"] = home
 
         if home:
             self.assists_home = df_assists
@@ -503,7 +506,6 @@ class GameData:
         self.get_assist_data(home=False)
 
         self.replace_player_ids()
-
 
 
 @dataclass
@@ -620,3 +622,50 @@ class SeasonData:
         self.team_data_agg["season"] = self.season
 
         pass
+
+    def calculate_per(self):
+        league_vop = np.sum(self.team_data_agg["points_scored"]) / np.sum(self.team_data_agg["pos"])
+        league_drp = np.sum(self.team_data_agg["D"]) / np.sum(self.team_data_agg["D"] + self.team_data_agg["O"])
+        league_factor = (2 / 3) - np.sum(self.team_data_agg["AS"] / (2 * np.sum(self.team_data_agg["2FGM"] +
+                                                                                np.sum(self.team_data_agg["3FGM"]))) / (
+                                                 2 * (np.sum(self.team_data_agg["2FGM"]) +
+                                                      np.sum(self.team_data_agg["3FGM"])) / np.sum(
+                                             self.team_data_agg["FTM"])))
+        league_foul = np.sum(self.team_data_agg["FTM"] -
+                             (league_vop * self.team_data_agg["multi_ft"])) / np.sum(self.team_data_agg["CM"])
+
+        league_pace = np.mean(
+            (self.team_data_agg["pos"] + self.team_data_agg["opp_pos"]) / self.team_data_agg["game_count"] / 2)
+
+        # TODO merging could be faster
+        def u_per(row):
+            team_stats = self.team_data.loc[
+                         (self.team_data["game_code"] == row["game_code"]) &
+                         (self.team_data["CODETEAM"] == row["CODETEAM"]), :]
+
+            fg = row["2FGM"] + row["3FGM"]
+            fga = row["2FGA"] + row["3FGA"]
+            team_fg = team_stats["2FGM"].iloc[0] + team_stats["3FGM"].iloc[0]
+            c0 = (1 / (row["duration"] / 60))
+            c1 = row["3FGM"] + 0.66 * row["AS"]
+            c2 = (2 - league_factor * team_stats["AS"]/team_fg)*fg
+            c3_1 = 0.5 * row["FTM"]
+            c3_2 = 2 - team_stats["AS"]/(team_fg*3)
+            c4 = league_vop * row["TO"]
+            c5 = league_vop * league_drp * (fga - fg)
+            c6 = league_vop * 0.44 * (0.44 + (0.56 * league_drp)) * (row["FTA"] - row["FTM"])
+            c7 = league_vop * (1 - league_drp) * row["D"]
+            c8 = league_vop * league_drp * row["O"]
+            c9 = league_vop * row["ST"]
+            c10 = league_vop * league_drp * row["FV"]
+            c11 = league_foul * row["CM"]
+
+            uper_stat = c0 * (c1 + c2 + (c3_1*c3_2) - c4 - c5 - c6 + c7 + c8 + c9 - (c11*c10))
+            team_pace = (team_stats["pos"].iloc[0] + team_stats["opp_pos"].iloc[0]) / 2
+
+            return uper_stat, team_pace
+
+        df_tmp = self.player_data.apply(lambda x: u_per(x), axis=1, result_type="expand")
+        df_tmp.columns = ["uPER", "team_pace"]
+        print(df_tmp)
+        self.player_data["PER"] = (df_tmp["uPER"] * league_pace / df_tmp["team_pace"]) * 15 / np.mean(df_tmp["uPER"])
