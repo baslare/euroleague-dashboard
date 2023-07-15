@@ -50,5 +50,7 @@ if __name__ == '__main__':
     season_instance.aggregate_team_data()
     season_instance.aggregate_player_data()
 
+    season_instance.calculate_per_game_based()
+
     conn = MongoConnectionSeason(season_instance)
     conn.insert_season()
