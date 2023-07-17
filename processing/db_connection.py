@@ -24,6 +24,7 @@ class MongoConnectionGame:
         self.assists.insert_many(self.game_data.assists_home.to_dict("records"))
         self.assists.insert_many(self.game_data.assists_away.to_dict("records"))
 
+
 class MongoConnectionSeason:
     client: pymongo.MongoClient
 
@@ -43,6 +44,8 @@ class MongoConnectionSeason:
         self.teams_agg = self.db["teams_agg"]
         self.points_agg = self.db["points_agg"]
 
+        self.quantiles = self.db["quantiles"]
+
     def insert_season(self):
         self.lineups.insert_many(self.season_data.lineup_data.to_dict("records"))
         self.players.insert_many(self.season_data.player_data.to_dict("records"))
@@ -53,3 +56,5 @@ class MongoConnectionSeason:
         self.players_agg.insert_many(self.season_data.player_data_agg.to_dict("records"))
         self.teams_agg.insert_many(self.season_data.team_data_agg.to_dict("records"))
         self.points_agg.insert_many(self.season_data.points_data.to_dict("records"))
+
+        self.quantiles.insert_many(self.season_data.quantiles.to_dict("records"))

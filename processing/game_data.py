@@ -373,27 +373,40 @@ class GameData:
         df = df.loc[df["PLAYER_ID"] != "", :]
 
         player_df_list = []
+        player_df_list_off = []
         for idx, x in enumerate(df["PLAYER_ID"]):
             dfx = lineup.loc[lineup["lineups_string"].str.contains(x), :].copy()
-            # dfx.is_copy = None
+            dfx_off = lineup.loc[~lineup["lineups_string"].str.contains(x), :].copy()
+
             if dfx.shape[0] > 0:
                 dfx["PLAYER_ID"] = x
+                dfx_off["PLAYER_ID"] = x
                 player_df_list.append(dfx)
+                player_df_list_off.append(dfx_off)
 
         stat_keys_extended = stat_keys + [f"opp_{x}" for x in stat_keys]
         stat_keys_extended.insert(0, "duration")
         stat_dict_extended = {x: "sum" for x in stat_keys_extended}
+        stat_dict = {x: "sum" for x in stat_keys}
         player_df_list = pd.concat(player_df_list, axis=0)
         player_df_list = player_df_list.groupby("PLAYER_ID").agg(stat_dict_extended).reset_index()
+
+        player_df_list_off = pd.concat(player_df_list_off, axis=0)
+        player_df_list_off = player_df_list_off.groupby("PLAYER_ID").agg(stat_dict).reset_index()
 
         rename_dict = {x: f"team_{x}" for x in stat_keys}
         player_df_list = player_df_list.rename(columns=rename_dict)
         team_cols = [f"team_{x}" for x in stat_keys]
 
+        rename_dict_off = {x: f"off_{x}" for x in stat_keys}
+        player_df_list_off = player_df_list_off.rename(columns=rename_dict_off)
+
         df = df.merge(player_df_list, how="left", on="PLAYER_ID")
 
         for x, y in zip(stat_keys, team_cols):
             df[f"{x}_ratio"] = df[x] / df[y]
+
+        df = df.merge(player_df_list_off, how="left", on="PLAYER_ID")
 
         df["pts"] = df["FTM"] + 2 * df["2FGM"] + 3 * df["3FGM"]
         df["team_pts"] = df["team_FTM"] + 2 * df["team_2FGM"] + 3 * df["team_3FGM"]
@@ -405,7 +418,7 @@ class GameData:
         df["DREBR"] = df["D"] / (df["team_D"] + df["opp_O"])
         df["OREBR"] = df["O"] / (df["team_O"] + df["opp_D"])
         df["usage"] = (df["multi_ft"] + df["2FGA"] + df["3FGA"] + df["TO"]) / (
-                    df["team_multi_ft"] + df["team_2FGA"] + df["team_3FGA"] + df["team_TO"])
+                df["team_multi_ft"] + df["team_2FGA"] + df["team_3FGA"] + df["team_TO"])
 
         df["PIR"] = df["pts"] + df["O"] + df["D"] + df["AS"] + df["ST"] + df["FV"] + df["RV"] - df["2FGA"] - df[
             "3FGA"] - \
@@ -530,6 +543,7 @@ class SeasonData:
     team_data_agg: pd.DataFrame
     points_data: pd.DataFrame
     assists_data: pd.DataFrame
+    quantiles: pd.DataFrame
 
     def __init__(self, season):
         self.season = season
@@ -555,6 +569,7 @@ class SeasonData:
         team_data_list = [x.team_stats for x in self.game_list]
         self.team_data = pd.concat(team_data_list)
         self.team_data["season"] = self.season
+
         pass
 
     def concatenate_points_data(self):
@@ -564,6 +579,18 @@ class SeasonData:
     def concatenate_assists_data(self):
         assists_data_list = [x.assists_home for x in self.game_list] + [x.assists_away for x in self.game_list]
         self.assists_data = pd.concat(assists_data_list)
+
+    def concatenate_quantile_data(self):
+        percentiles = [0.25, 0.50, 0.75, 0.95, 1]
+
+        player_quantiles = [self.player_data["PIR"].quantile(x) for x in percentiles]
+        team_quantiles = [self.team_data["PPP"].quantile(x) for x in percentiles]
+
+        df = pd.DataFrame.from_dict({0: [player_quantiles, "player"],
+                                     1: [team_quantiles, "team"]},
+                                    orient="index").rename(columns={0: "quantiles",
+                                                                    1: "type"})
+        self.quantiles = df
 
     def aggregate_player_data(self):
         self.player_data["game_count"] = 1
@@ -598,9 +625,6 @@ class SeasonData:
                                                 self.player_data_agg["team_2FGA"] +
                                                 self.player_data_agg["team_3FGA"] +
                                                 self.player_data_agg["team_TO"])
-
-        # TODO add advanced statistics here
-        pass
 
     def aggregate_lineup_data(self):
         self.lineup_data["game_count"] = 1
