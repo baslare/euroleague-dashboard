@@ -505,6 +505,21 @@ class GameData:
 
         pass
 
+    def add_player_info(self):
+
+        self.home_players_processed = self.home_players_processed.merge(
+            self.home_players[["ac", "p", "im"]],
+            how="left",
+            left_on="PLAYER_ID",
+            right_on="ac")
+        self.away_players_processed = self.away_players_processed.merge(
+            self.away_players[["ac", "p", "im"]],
+            how="left",
+            left_on="PLAYER_ID",
+            right_on="ac")
+
+        pass
+
     def process_game_data(self):
 
         self.extract_home_away_lineups()
@@ -529,6 +544,7 @@ class GameData:
         self.get_assist_data(home=False)
 
         self.replace_player_ids()
+        self.add_player_info()
 
 
 @dataclass
@@ -601,7 +617,7 @@ class SeasonData:
 
         cols_dict = {x: "sum" for x in cols_to_sum} | {x: "mean" for x in cols_to_average}
 
-        self.player_data_agg = self.player_data.groupby(["PLAYER_ID", "playerName", "CODETEAM"]).agg(cols_dict)
+        self.player_data_agg = self.player_data.groupby(["PLAYER_ID", "playerName", "CODETEAM","p","im"]).agg(cols_dict)
         self.player_data_agg = self.player_data_agg.reset_index()
         self.player_data_agg["season"] = self.season
 
