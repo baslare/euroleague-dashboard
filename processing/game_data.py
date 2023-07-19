@@ -409,6 +409,7 @@ class GameData:
         df = df.merge(player_df_list_off, how="left", on="PLAYER_ID")
 
         df["pts"] = df["FTM"] + 2 * df["2FGM"] + 3 * df["3FGM"]
+        df["off_pts"] = df["off_FTM"] + 2 * df["off_2FGM"] + 3 * df["off_3FGM"]
         df["team_pts"] = df["team_FTM"] + 2 * df["team_2FGM"] + 3 * df["team_3FGM"]
         df["opp_pts"] = df["opp_FTM"] + 2 * df["opp_2FGM"] + 3 * df["opp_3FGM"]
         df["plus_minus"] = df["team_pts"] - df["opp_pts"]
@@ -424,6 +425,10 @@ class GameData:
             "3FGA"] - \
                     df["FTA"] + df["2FGM"] + df["3FGM"] + df["FTM"] - df["TO"] - df["AG"] - df["CM"] - df["OF"] - \
                     df["CMT"] - df["CMU"] - df["CMD"]
+
+        df["on_ORtg"] = 100*(df["team_pts"]/df["team_pos"])
+        df["off_ORtg"] = 100*(df["off_pts"]/df["off_pos"])
+
 
         if home:
             self.home_players_processed = df

@@ -174,7 +174,7 @@ class ELAPI:
                 json_error_count = json_error_count - 1
             except:
                 e = sys.exc_info()[0]
-                with open("dnm.json", "w") as file:
+                with open("crash_dump.json", "w") as file:
                     json.dump(season_games_list, file)
 
                 print('Unhandled Exception: ', e, "game: ", game, " season: ", season, " .json file saved")
