@@ -1,5 +1,7 @@
 import json
 from tqdm.auto import tqdm
+
+import processing.game_data
 from processing.db_connection import MongoConnectionSeason
 from processing.game_data import SeasonData
 from el_api_wrapper import ELAPI
@@ -52,6 +54,7 @@ if __name__ == '__main__':
     season_instance.aggregate_player_data()
 
     season_instance.calculate_per_game_based()
+    season_instance.calculate_per_season_based()
 
     conn = MongoConnectionSeason(season_instance)
     conn.insert_season()

@@ -387,18 +387,20 @@ class GameData:
         stat_keys_extended = stat_keys + [f"opp_{x}" for x in stat_keys]
         stat_keys_extended.insert(0, "duration")
         stat_dict_extended = {x: "sum" for x in stat_keys_extended}
-        stat_dict = {x: "sum" for x in stat_keys}
+        stat_keys_off = stat_keys + ["opp_pos", "opp_2FGM", "opp_3FGM", "opp_FTM"]
+        stat_dict_off = {x: "sum" for x in stat_keys_off}
         player_df_list = pd.concat(player_df_list, axis=0)
         player_df_list = player_df_list.groupby("PLAYER_ID").agg(stat_dict_extended).reset_index()
 
         player_df_list_off = pd.concat(player_df_list_off, axis=0)
-        player_df_list_off = player_df_list_off.groupby("PLAYER_ID").agg(stat_dict).reset_index()
+
+        player_df_list_off = player_df_list_off.groupby("PLAYER_ID").agg(stat_dict_off).reset_index()
 
         rename_dict = {x: f"team_{x}" for x in stat_keys}
         player_df_list = player_df_list.rename(columns=rename_dict)
         team_cols = [f"team_{x}" for x in stat_keys]
 
-        rename_dict_off = {x: f"off_{x}" for x in stat_keys}
+        rename_dict_off = {x: f"off_{x}" for x in stat_keys_off}
         player_df_list_off = player_df_list_off.rename(columns=rename_dict_off)
 
         df = df.merge(player_df_list, how="left", on="PLAYER_ID")
@@ -426,9 +428,66 @@ class GameData:
                     df["FTA"] + df["2FGM"] + df["3FGM"] + df["FTM"] - df["TO"] - df["AG"] - df["CM"] - df["OF"] - \
                     df["CMT"] - df["CMU"] - df["CMD"]
 
-        df["on_ORtg"] = 100*(df["team_pts"]/df["team_pos"])
-        df["off_ORtg"] = 100*(df["off_pts"]/df["off_pos"])
+        df["on_ORtg"] = 100 * (df["team_pts"] / df["team_pos"])
+        df["off_ORtg"] = 100 * (df["off_pts"] / df["off_pos"])
+        df["on_DRtg"] = 100 * (df["opp_pts"] / df["opp_pos"])
+        df["off_opp_pts"] = df["off_opp_FTM"] + 2 * df["off_opp_2FGM"] + 3 * df["off_opp_3FGM"]
+        df["off_DRtg"] = 100 * (df["off_opp_pts"] / df["off_opp_pos"])
 
+        df["eFG"] = (df["pts"] - df["FTM"]) / (2 * df["2FGA"] + 2 * df["3FGA"])
+
+        # calculate individual ORTG and DRTG
+
+        q_ast = ((df["assisted_2fg"] + df["assisted_3fg"]) / (
+                df["2FGM"] + df["3FGM"])).fillna(0)
+
+        pts_gen_fg = ((df["2FGM"] + df["3FGM"]) * (1 - (0.5 * df["eFG"] * q_ast))).fillna(0)
+
+        pts_gen_ast = (0.5 * df["AS"]) * ((
+                                                  (df["team_pts"] - df["team_FTM"]) - (
+                                                  df["pts"] - df["FTM"])) / (
+                                                  2 * (df["team_2FGA"] + df["team_3FGA"] -
+                                                       df["2FGA"] - df["3FGA"])))
+
+        pts_gen_ft = ((1 - np.square(1 - df["FTM"] / df["FTA"])) * df["multi_ft"]).fillna(0)
+
+        team_scoring_poss = df["team_2FGM"] + df["team_3FGM"] + (1 - np.square(1 - df["team_FTM"] / df["team_FTA"])) * \
+                            df["team_multi_ft"]
+
+        team_orb_pct = df["team_O"] / (df["team_O"] + df["opp_D"])
+        team_play_pct = team_scoring_poss / (df["team_2FGA"] + df["team_3FGA"] + df["team_multi_ft"] + df["team_TO"])
+        team_orb_weight = ((1 - team_orb_pct) * team_play_pct) / (
+                (1 - team_orb_pct) * team_play_pct + team_orb_pct * (1 - team_play_pct))
+
+        pts_gen_orb = df["O"] * team_orb_weight * team_play_pct
+
+        scoring_poss = (pts_gen_fg + pts_gen_ast + pts_gen_ft.fillna(0)) * \
+                       (1 - (df["team_O"] / team_scoring_poss) * team_orb_weight * team_play_pct) + pts_gen_orb
+
+        missed_fg_part = (df["2FGA"] + df["3FGA"] - df["2FGM"] - df["3FGM"]) * (1 - 1.07 * team_orb_pct)
+
+        missed_ft_part = 1 - pts_gen_ft
+
+        ind_pos = scoring_poss + missed_ft_part + missed_fg_part + df["TO"]
+
+        pts_prod_fg = ((2 * df["2FGM"] + 3 * (df["3FGM"])) * (
+                1 - 0.5 * ((df["pts"] - df["FTM"])/(2*(df["2FGA"] + df["3FGA"]))
+                )*q_ast)).fillna(0)
+
+        pts_prod_ast = (((2 * (df["team_2FGM"] - df["2FGM"]) +
+                          3 * (df["team_3FGM"] - df["3FGM"])
+                          ) / (
+                                 df["team_3FGM"] + df["team_2FGM"] -
+                                 df["2FGM"] - df["3FGM"])) * pts_gen_ast).fillna(0)
+
+        pts_prod_ft = df["FTM"]
+
+        pts_prod_orb = df["O"] * team_orb_weight * team_play_pct * (df["team_pts"] / team_scoring_poss)
+
+        points_produced = (pts_prod_fg + pts_prod_ast + pts_prod_ft) * \
+                          (1 - (df["team_O"] / team_scoring_poss) * team_orb_weight * team_play_pct) + pts_prod_orb
+
+        df["ORtg"] = 100 * (points_produced / ind_pos)
 
         if home:
             self.home_players_processed = df
@@ -622,7 +681,8 @@ class SeasonData:
 
         cols_dict = {x: "sum" for x in cols_to_sum} | {x: "mean" for x in cols_to_average}
 
-        self.player_data_agg = self.player_data.groupby(["PLAYER_ID", "playerName", "CODETEAM","p","im"]).agg(cols_dict)
+        self.player_data_agg = self.player_data.groupby(["PLAYER_ID", "playerName", "CODETEAM", "p", "im"]).agg(
+            cols_dict)
         self.player_data_agg = self.player_data_agg.reset_index()
         self.player_data_agg["season"] = self.season
 
@@ -646,6 +706,8 @@ class SeasonData:
                                                 self.player_data_agg["team_2FGA"] +
                                                 self.player_data_agg["team_3FGA"] +
                                                 self.player_data_agg["team_TO"])
+        self.player_data_agg["a2Pr"] = self.player_data_agg["assisted_2fg"] / self.player_data_agg["2FGM"]
+        self.player_data_agg["a3Pr"] = self.player_data_agg["assisted_3fg"] / self.player_data_agg["3FGM"]
 
     def aggregate_lineup_data(self):
         self.lineup_data["game_count"] = 1
@@ -685,6 +747,8 @@ class SeasonData:
         self.team_data_agg["3FGR"] = self.team_data_agg["3FGM"] / self.team_data_agg["3FGA"]
         self.team_data_agg["FTR"] = self.team_data_agg["FTM"] / self.team_data_agg["FTA"]
         self.team_data_agg["season"] = self.season
+        self.team_data_agg["ORtg"] = 100 * self.team_data_agg["points_scored"] / self.team_data_agg["pos"]
+        self.team_data_agg["DRtg"] = 100 * self.team_data_agg["opp_points_scored"] / self.team_data_agg["opp_pos"]
 
         pass
 
@@ -698,7 +762,7 @@ class SeasonData:
                                              self.team_data_agg["FTM"])))
         league_foul = np.sum(self.team_data_agg["FTM"] -
                              (league_vop * self.team_data_agg["multi_ft"])) / np.sum(
-            self.team_data_agg["CM"] + self.team_data_agg["CMU"])
+            self.team_data_agg["CM"] + self.team_data_agg["CMU"] + self.team_data_agg["OF"] + self.team_data_agg["CMT"])
 
         league_pace = np.mean(
             (self.team_data_agg["pos"] + self.team_data_agg["opp_pos"]) / self.team_data_agg["game_count"] / 2)
@@ -726,7 +790,7 @@ class SeasonData:
             c10 = league_vop * league_drp * row["FV"]
             c11 = league_foul * row["CM"]
 
-            uper_stat = c0 * (c1 + c2 + (c3_1 * c3_2) - c4 - c5 - c6 + c7 + c8 + c9 - (c11 * c10))
+            uper_stat = c0 * (c1 + c2 + (c3_1 * c3_2) - c4 - c5 - c6 + c7 + c8 + c9 + c10 - c11)
             team_pace = (team_stats["pos"].iloc[0] + team_stats["opp_pos"].iloc[0]) / 2
 
             return uper_stat.iloc[0], team_pace
@@ -735,4 +799,56 @@ class SeasonData:
         df_tmp.columns = ["uPER", "team_pace"]
 
         self.player_data["uPER"] = df_tmp["uPER"]
-        self.player_data["PER"] = (df_tmp["uPER"] * league_pace / df_tmp["team_pace"]) * 15 / np.mean(df_tmp["uPER"])
+        self.player_data["PER"] = (df_tmp["uPER"] * league_pace / df_tmp["team_pace"]) * 15 / np.mean(
+            self.player_data.loc[self.player_data["duration"] >= 180, "uPER"])
+        self.player_data.loc[self.player_data["duration"] < 180, "PER"] = np.nan
+
+    def calculate_per_season_based(self):
+        league_vop = np.sum(self.team_data_agg["points_scored"]) / np.sum(self.team_data_agg["pos"])
+        league_drp = np.sum(self.team_data_agg["D"]) / np.sum(self.team_data_agg["D"] + self.team_data_agg["O"])
+        league_factor = (2 / 3) - np.sum(self.team_data_agg["AS"] / (2 * np.sum(self.team_data_agg["2FGM"] +
+                                                                                np.sum(self.team_data_agg["3FGM"]))) / (
+                                                 2 * (np.sum(self.team_data_agg["2FGM"]) +
+                                                      np.sum(self.team_data_agg["3FGM"])) / np.sum(
+                                             self.team_data_agg["FTM"])))
+        league_foul = np.sum(self.team_data_agg["FTM"] -
+                             (league_vop * self.team_data_agg["multi_ft"])) / np.sum(
+            self.team_data_agg["CM"] + self.team_data_agg["CMU"] + self.team_data_agg["OF"] + self.team_data_agg["CMT"])
+
+        league_pace = np.mean(
+            (self.team_data_agg["pos"] + self.team_data_agg["opp_pos"]) / self.team_data_agg["game_count"] / 2)
+
+        # TODO merging could be faster
+        def u_per(row):
+            team_stats = self.team_data_agg.loc[(self.team_data_agg["CODETEAM"] == row["CODETEAM"]), :]
+
+            fg = row["2FGM"] + row["3FGM"]
+            fga = row["2FGA"] + row["3FGA"]
+            team_fg = (team_stats["2FGM"] + team_stats["3FGM"]).iloc[0]
+            c0 = (1 / (row["duration"] / 60))
+            c1 = row["3FGM"] + 0.66 * row["AS"]
+            c2 = (2 - league_factor * team_stats["AS"].iloc[0] / team_fg) * fg
+            c3_1 = 0.5 * row["FTM"]
+            c3_2 = 2 - team_stats["AS"].iloc[0] / (team_fg * 3)
+            c4 = league_vop * row["TO"]
+            c5 = league_vop * league_drp * (fga - fg)
+            c6 = league_vop * 0.44 * (0.44 + (0.56 * league_drp)) * (row["FTA"] - row["FTM"])
+            c7 = league_vop * (1 - league_drp) * row["D"]
+            c8 = league_vop * league_drp * row["O"]
+            c9 = league_vop * row["ST"]
+            c10 = league_vop * league_drp * row["FV"]
+            c11 = league_foul * (row["CM"] + row["OF"] + row["CMU"])
+
+            uper_stat = c0 * (c1 + c2 + (c3_1 * c3_2) - c4 - c5 - c6 + c7 + c8 + c9 + c10 - c11)
+            team_pace = team_stats["pos"].iloc[0] / team_stats["game_count"].iloc[0]
+
+            return uper_stat, team_pace
+
+        df_tmp = self.player_data_agg.apply(lambda x: u_per(x), axis=1, result_type="expand")
+        df_tmp.columns = ["uPER_season", "team_pace"]
+
+        self.player_data_agg["uPER_season"] = df_tmp["uPER_season"]
+        self.player_data_agg["PER_season"] = (df_tmp["uPER_season"] * league_pace / df_tmp["team_pace"]) * 15 / np.mean(
+            self.player_data_agg.loc[self.player_data_agg["duration"] >= 1800, "uPER_season"])
+        self.player_data_agg.loc[self.player_data_agg["duration"] < 1800, "PER_season"] = np.nan
+        return df_tmp
