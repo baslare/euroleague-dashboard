@@ -235,7 +235,7 @@ class GameData:
         stat_keys = ["duration", "AS", "TO", "3FGM", "3FGA", "2FGA", "2FGM",
                      "3FGA", "FTM", "FTA", "D", "O", "REB",
                      "RV", "CM", "FV", "AG", "ST", "OF", "CMT", "CMU", "CMD",
-                     "multi_ft", "assisted_2fg", "assisted_3fg",
+                     "multi_ft", "multi_ft_count", "tech_ft", "assisted_2fg", "assisted_3fg",
                      "assisted_ft", "and_one_2fg", "and_one_3fg", "pos"]
 
         stat_dict = {x: "sum" for x in stat_keys}
@@ -274,24 +274,44 @@ class GameData:
 
     def extra_stats_finder(self, home=True):
         pbp = self.pbp_processed_home if home else self.pbp_processed_away
-        pbp_sub = pbp.groupby("time").apply(
+        pbp_sub = pbp.groupby(["time", "PLAYER_ID"]).apply(
             lambda x: list(x["PLAYTYPE"])).reset_index().rename(columns={0: "PLAYTYPE"})
 
         def finder(row):
             if len(row) > 1:
-                multi_ft = sum([bool(re.match("FT", a)) for a in row]) > 1
-                and_one_2fg = all([item in row for item in ["2FGM", "RV"]]) and any(
-                    [bool(re.match("FT", a)) for a in row])
-                and_one_3fg = all([item in row for item in ["3FGM", "RV"]]) and any(
-                    [bool(re.match("FT", a)) for a in row])
+                multi_ft = sum([bool(re.match("FT", a)) for a in row]) > 1 or (
+                        (sum([bool(re.match("FT", a)) for a in row]) == 1) &
+                        any([bool(re.match("RV", a)) for a in row]) &
+                        all([not (item in row) for item in ["3FGM", "2FGM"]])
+                )
+
+                and_one_2fg = all([item in row for item in ["2FGM", "RV"]]) and (sum(
+                    [bool(re.match("FT", a)) for a in row]) == 1)
+                and_one_3fg = all([item in row for item in ["3FGM", "RV"]]) and (sum(
+                    [bool(re.match("FT", a)) for a in row]) == 1)
+                tech_ft = (sum([bool(re.match("FT", a)) for a in row]) == 1) & (
+                    all([not (item in row) for item in ["3FGM", "2FGM", "RV"]]))
 
                 return {"multi_ft": multi_ft,
                         "and_one_2fg": and_one_2fg,
-                        "and_one_3fg": and_one_3fg}
+                        "and_one_3fg": and_one_3fg,
+                        "tech_ft": tech_ft
+                        }
+
+            elif (len(row) == 1) & ((row[0] == "FTM") | (row[0] == "FTA")):
+
+                tech_dict = {"multi_ft": False,
+                             "and_one_2fg": False,
+                             "and_one_3fg": False,
+                             "tech_ft": True}
+
+                return tech_dict
+
             else:
                 return {"multi_ft": False,
                         "and_one_2fg": False,
-                        "and_one_3fg": False}
+                        "and_one_3fg": False,
+                        "tech_ft": False}
 
         pbp_sub["extra_stats"] = pbp_sub["PLAYTYPE"].apply(lambda x: finder(x))
         pbp_sub2 = pd.json_normalize(pbp_sub["extra_stats"])
@@ -327,14 +347,15 @@ class GameData:
         pbp_sub = pd.concat([pbp_sub, pbp_sub2], axis=1)
         pbp_sub.loc[pbp_sub.shape[0] - 1, "check"] = ["EG"]
         pbp_sub = pbp_sub.drop(["PLAYTYPE", "check"], axis=1)
-        mask = pbp["time"].duplicated()
+        mask = pbp.duplicated(["PLAYER_ID", "time"])
 
         col_names = [str(x) for x in pbp_sub.columns]
-        pbp = pbp.merge(pbp_sub, how="left", on="time")
+        pbp = pbp.merge(pbp_sub, how="left", on=["time", "PLAYER_ID"])
         pbp["multi_ft"] = pbp["multi_ft"] & pbp["FTA"]
-        pbp.loc[mask, col_names[2:]] = False
+        pbp["multi_ft_count"] = pbp["multi_ft"] & pbp["FTA"]
+        pbp.loc[mask, col_names[3:]] = False
 
-        ft_mask = pbp[["FTA", "time"]].duplicated()
+        ft_mask = pbp[["multi_ft_count", "time"]].duplicated()
         pbp.loc[ft_mask, "multi_ft"] = False
 
         pbp["assisted_2fg"] = pbp_sub3["assisted_2fg"]
@@ -350,7 +371,7 @@ class GameData:
 
         pbp["pos"] = pbp["multi_ft"].astype(int) + pbp["2FGA"].astype(int) + pbp["3FGA"].astype(int) + pbp["TO"].astype(
             int) - pbp["O"].astype(int)
-        pass
+
         if home:
             self.pbp_processed_home = pbp
         else:
@@ -364,7 +385,7 @@ class GameData:
         stat_keys = ["AS", "TO", "3FGM", "3FGA", "2FGA", "2FGM",
                      "3FGA", "FTM", "FTA", "D", "O", "REB",
                      "RV", "CM", "FV", "AG", "ST", "OF", "CMT", "CMU", "CMD",
-                     "multi_ft", "assisted_2fg", "assisted_3fg",
+                     "multi_ft", "multi_ft_count", "tech_ft", "assisted_2fg", "assisted_3fg",
                      "assisted_ft", "and_one_2fg", "and_one_3fg", "pos"]
 
         stat_dict = {x: "sum" for x in stat_keys}
@@ -406,7 +427,10 @@ class GameData:
         df = df.merge(player_df_list, how="left", on="PLAYER_ID")
 
         for x, y in zip(stat_keys, team_cols):
-            df[f"{x}_ratio"] = df[x] / df[y]
+            if x == "tech_ft":
+                pass
+            else:
+                df[f"{x}_ratio"] = df[x] / df[y]
 
         df = df.merge(player_df_list_off, how="left", on="PLAYER_ID")
 
@@ -471,8 +495,8 @@ class GameData:
         ind_pos = scoring_poss + missed_ft_part + missed_fg_part + df["TO"]
 
         pts_prod_fg = ((2 * df["2FGM"] + 3 * (df["3FGM"])) * (
-                1 - 0.5 * ((df["pts"] - df["FTM"])/(2*(df["2FGA"] + df["3FGA"]))
-                )*q_ast)).fillna(0)
+                1 - 0.5 * ((df["pts"] - df["FTM"]) / (2 * (df["2FGA"] + df["3FGA"]))
+                           ) * q_ast)).fillna(0)
 
         pts_prod_ast = (((2 * (df["team_2FGM"] - df["2FGM"]) +
                           3 * (df["team_3FGM"] - df["3FGM"])
@@ -488,6 +512,10 @@ class GameData:
                           (1 - (df["team_O"] / team_scoring_poss) * team_orb_weight * team_play_pct) + pts_prod_orb
 
         df["ORtg"] = 100 * (points_produced / ind_pos)
+
+        ft_test = (df["multi_ft_count"] + df["and_one_2fg"] + df["tech_ft"] + df["and_one_3fg"] - df["FTA"])
+        if ~np.all(ft_test == 0):
+            pass
 
         if home:
             self.home_players_processed = df
@@ -708,6 +736,9 @@ class SeasonData:
                                                 self.player_data_agg["team_TO"])
         self.player_data_agg["a2Pr"] = self.player_data_agg["assisted_2fg"] / self.player_data_agg["2FGM"]
         self.player_data_agg["a3Pr"] = self.player_data_agg["assisted_3fg"] / self.player_data_agg["3FGM"]
+
+        self.player_data_agg["eFG"] = (self.player_data_agg["pts"] - self.player_data_agg["FTM"]) / \
+                                      (2 * self.player_data_agg["2FGA"] + 2 * self.player_data_agg["3FGA"])
 
     def aggregate_lineup_data(self):
         self.lineup_data["game_count"] = 1
