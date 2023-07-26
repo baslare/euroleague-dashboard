@@ -550,6 +550,10 @@ class GameData:
         home_stats["DRBEBR"] = home_stats["D"] / (home_stats["D"] + home_stats["opp_O"])
         home_stats["ORBEBR"] = home_stats["O"] / (home_stats["O"] + home_stats["opp_D"])
         home_stats["PPP"] = home_stats["points_scored"] / home_stats["pos"]
+        home_stats["TOR"] = home_stats["TO"] / (
+                home_stats["2FGA"] + home_stats["3FGA"] + home_stats["multi_ft"] + home_stats["TO"])
+        home_stats["FT_four"] = home_stats["FTM"] / (
+                home_stats["2FGA"] + home_stats["3FGA"])
 
         away_stats["2FGR"] = away_stats["2FGM"] / away_stats["2FGA"]
         away_stats["3FGR"] = away_stats["3FGM"] / away_stats["3FGA"]
@@ -557,6 +561,9 @@ class GameData:
         away_stats["DRBEBR"] = away_stats["D"] / (away_stats["D"] + away_stats["opp_O"])
         away_stats["ORBEBR"] = away_stats["O"] / (away_stats["O"] + away_stats["opp_D"])
         away_stats["PPP"] = away_stats["points_scored"] / away_stats["pos"]
+        away_stats["TOR"] = away_stats["TO"] / (
+                away_stats["2FGA"] + away_stats["3FGA"] + away_stats["multi_ft"] + away_stats["TO"])
+        away_stats["FT_four"] = away_stats["FTM"] / (away_stats["2FGA"] + away_stats["3FGA"])
 
         self.team_stats = pd.concat([home_stats, away_stats])
         self.team_stats["game_code"] = self.game_code
@@ -740,6 +747,9 @@ class SeasonData:
         self.player_data_agg["eFG"] = (self.player_data_agg["pts"] - self.player_data_agg["FTM"]) / \
                                       (2 * self.player_data_agg["2FGA"] + 2 * self.player_data_agg["3FGA"])
 
+        self.player_data_agg["TS"] = self.player_data_agg["pts"] / (
+                2 * (self.player_data_agg["2FGA"] + self.player_data_agg["3FGA"]) + self.player_data_agg["multi_ft"])
+
     def aggregate_lineup_data(self):
         self.lineup_data["game_count"] = 1
         numeric_columns = self.lineup_data.select_dtypes(include=np.number).columns.tolist()
@@ -781,7 +791,14 @@ class SeasonData:
         self.team_data_agg["ORtg"] = 100 * self.team_data_agg["points_scored"] / self.team_data_agg["pos"]
         self.team_data_agg["DRtg"] = 100 * self.team_data_agg["opp_points_scored"] / self.team_data_agg["opp_pos"]
 
-        pass
+        self.team_data_agg["TOR"] = self.team_data_agg["TO"] / (
+                self.team_data_agg["2FGA"] + self.team_data_agg["3FGA"] + self.team_data_agg["multi_ft"] +
+                self.team_data_agg["TO"])
+        self.team_data_agg["FT_four"] = self.team_data_agg["FTM"] / (
+                self.team_data_agg["2FGA"] + self.team_data_agg["3FGA"])
+        self.team_data_agg["eFG"] = (self.team_data_agg["points_scored"] -
+                                     self.team_data_agg["FTM"]) / (
+                                            2 * (self.team_data_agg["2FGA"] + self.team_data_agg["3FGA"]))
 
     def calculate_per_game_based(self):
         league_vop = np.sum(self.team_data_agg["points_scored"]) / np.sum(self.team_data_agg["pos"])
@@ -883,3 +900,19 @@ class SeasonData:
             self.player_data_agg.loc[self.player_data_agg["duration"] >= 1800, "uPER_season"])
         self.player_data_agg.loc[self.player_data_agg["duration"] < 1800, "PER_season"] = np.nan
         return df_tmp
+
+    def get_percentile_ranks(self):
+
+        self.player_data_agg["PIR_rank"] = self.player_data_agg.loc[
+                                               self.player_data_agg["duration"] >= 1800, "PIR"].rank(pct=True) * 100
+        self.player_data_agg["PPG_rank"] = self.player_data_agg.loc[
+                                               self.player_data_agg["duration"] >= 1800, "pts"].rank(pct=True) * 100
+        self.player_data_agg["PER_rank"] = self.player_data_agg.loc[
+                                               self.player_data_agg["duration"] >= 1800, "PER_season"].rank(
+            pct=True) * 100
+        self.player_data_agg["EFG_rank"] = self.player_data_agg.loc[
+                                               self.player_data_agg["duration"] >= 1800, "eFG"].rank(pct=True) * 100
+        self.player_data_agg["MPG_rank"] = self.player_data_agg.loc[
+                                               self.player_data_agg["duration"] >= 1800, "duration_avg"].rank(pct=True) * 100
+        self.player_data_agg["USG_rank"] = self.player_data_agg.loc[
+                                               self.player_data_agg["duration"] >= 1800, "usage"].rank(pct=True) * 100

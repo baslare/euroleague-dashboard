@@ -55,6 +55,7 @@ if __name__ == '__main__':
 
     season_instance.calculate_per_game_based()
     season_instance.calculate_per_season_based()
+    season_instance.get_percentile_ranks()
 
     conn = MongoConnectionSeason(season_instance)
     conn.insert_season()
