@@ -315,33 +315,49 @@ class GameData:
 
         pbp_sub["extra_stats"] = pbp_sub["PLAYTYPE"].apply(lambda x: finder(x))
         pbp_sub2 = pd.json_normalize(pbp_sub["extra_stats"])
-        pbp_sub3 = pbp.loc[pbp["PLAYTYPE"].isin(["2FGM", "3FGM", "AS", "FTM"]), ["PLAYER_ID", "PLAYTYPE"]]
+        pbp_sub3 = pbp.loc[pbp["PLAYTYPE"].isin(["2FGM", "3FGM", "AS", "FTM"]), ["PLAYER_ID", "PLAYTYPE", "time"]]
+        pbp_sub3["PLAYTYPE"] = pbp_sub3["PLAYTYPE"].replace({"2FGM": "Two",
+                                                             "3FGM": "Three",
+                                                             "FTM": "FTM",
+                                                             "AS": "AS"})
 
-        assist_check_df = pbp_sub3[["PLAYER_ID", "PLAYTYPE"]].iloc[1:, :].reset_index(
+        pbp_sub3 = pbp_sub3.reset_index()
+        pbp_sub3 = pbp_sub3.groupby("time").apply(lambda x: x.sort_values("PLAYTYPE", ascending=False)).reset_index(
+            drop=True)
 
-        ).rename(columns={"index": "index_row_right"})
+        assist_queue = []
+        idx = pbp_sub3.shape[0] - 1
+        pbp_sub3["assisting_player"] = np.nan
 
-        pbp_sub3["index_row_left"] = pbp_sub3.index
+        # due to inconsistencies in the pbp, need to make sure assists are not being assigned to the same player
+        # but it is almost impossible to get every one of them right, a very small error margin to be expected
+        while idx >= 0:
 
-        pbp_sub3["index_row_right"] = assist_check_df["index_row_right"].tolist() + [np.inf]
-        pbp_sub3["check"] = assist_check_df["PLAYTYPE"].tolist() + [np.inf]
-        pbp_sub3["PLAYER_ID_right"] = assist_check_df["PLAYER_ID"].tolist() + [""]
-        pbp_sub3["assisted_2fg"] = (pbp_sub3["PLAYTYPE"] == "2FGM") & (
-                pbp_sub3["check"] == "AS") & (np.abs(pbp_sub3["index_row_left"] - pbp_sub3["index_row_right"]) == 1)
-        pbp_sub3["assisted_3fg"] = (pbp_sub3["PLAYTYPE"] == "3FGM") & (
-                pbp_sub3["check"] == "AS") & (np.abs(pbp_sub3["index_row_left"] - pbp_sub3["index_row_right"]) == 1)
-        pbp_sub3["assisted_ft"] = (pbp_sub3["PLAYTYPE"] == "AS") & (
-                pbp_sub3["check"] == "FTM") & (np.abs(pbp_sub3["index_row_left"] - pbp_sub3["index_row_right"]) == 1)
+            if pbp_sub3.loc[:, "PLAYTYPE"].iloc[idx] == "AS":
+                assist_queue.append(pbp_sub3.loc[:, "PLAYER_ID"].iloc[idx])
+            elif len(assist_queue) > 0:
+                if pbp_sub3.loc[idx, "PLAYER_ID"] == assist_queue[0]:
+                    pbp_sub3.loc[idx, "assisting_player"] = assist_queue.pop()
+                else:
+                    pbp_sub3.loc[idx, "assisting_player"] = assist_queue.pop(0)
+            else:
+                pass
 
-        # fix assisted ft assisting player names
-        assisted_ft_idx = pbp_sub3.loc[pbp_sub3["assisted_ft"], ["index_row_left", "index_row_right"]]
-        for left_index, right_index in zip(assisted_ft_idx["index_row_left"], assisted_ft_idx["index_row_right"]):
-            pbp_sub3.loc[right_index, "PLAYER_ID_right"] = pbp_sub3.loc[left_index, "PLAYER_ID"]
-            pbp_sub3.loc[left_index, "assisted_ft"], pbp_sub3.loc[right_index, "assisted_ft"] = pbp_sub3.loc[
-                right_index, "assisted_ft"], pbp_sub3.loc[left_index, "assisted_ft"]
+            idx -= 1
 
-        pbp_sub3.loc[~(pbp_sub3["assisted_2fg"] | pbp_sub3["assisted_3fg"] | pbp_sub3[
-            "assisted_ft"]), "PLAYER_ID_right"] = np.nan
+        pbp_sub3 = pbp_sub3.set_index("index")
+        sub3_index = pbp_sub3.index
+        pbp_sub3["index_to_fix"] = sub3_index
+
+        pbp_sub3 = pbp_sub3.groupby("time").apply(
+            lambda x: x.sort_values("assisting_player", ascending=False)).reset_index(
+            drop=True)
+
+        pbp_sub3 = pbp_sub3.set_index("index_to_fix")
+        pbp_sub3["assisted_2fg"] = (pbp_sub3["PLAYTYPE"] == "Two") & (~pbp_sub3["assisting_player"].isna())
+        pbp_sub3["assisted_3fg"] = (pbp_sub3["PLAYTYPE"] == "Three") & (~pbp_sub3["assisting_player"].isna())
+
+        pbp_sub3["assisted_ft"] = (pbp_sub3["PLAYTYPE"] == "FTM") & (~pbp_sub3["assisting_player"].isna())
 
         pbp_sub = pbp_sub.drop("extra_stats", axis=1)
         pbp_sub = pd.concat([pbp_sub, pbp_sub2], axis=1)
@@ -366,8 +382,10 @@ class GameData:
         pbp["assisted_3fg"].fillna(False, inplace=True)
         pbp["assisted_ft"].fillna(False, inplace=True)
 
-        pbp.loc[:, "assisted_ft"] = pbp["multi_ft"] & pbp["assisted_ft"]
-        pbp["assisting_player"] = pbp_sub3["PLAYER_ID_right"]
+        pbp["assisting_player"] = pbp_sub3["assisting_player"]
+
+        if np.any(pbp["PLAYER_ID"] == pbp["assisting_player"]):
+            pass
 
         pbp["pos"] = pbp["multi_ft"].astype(int) + pbp["2FGA"].astype(int) + pbp["3FGA"].astype(int) + pbp["TO"].astype(
             int) - pbp["O"].astype(int)
@@ -400,6 +418,7 @@ class GameData:
             dfx_off = lineup.loc[~lineup["lineups_string"].str.contains(x), :].copy()
 
             if dfx.shape[0] > 0:
+                dfx["PLAYER_ID"] = x
                 dfx["PLAYER_ID"] = x
                 dfx_off["PLAYER_ID"] = x
                 player_df_list.append(dfx)
@@ -902,17 +921,17 @@ class SeasonData:
         return df_tmp
 
     def get_percentile_ranks(self):
-
         self.player_data_agg["PIR_rank"] = self.player_data_agg.loc[
-                                               self.player_data_agg["duration"] >= 1800, "PIR"].rank(pct=True) * 100
+                                               self.player_data_agg["duration"] >= 1800, "PIR_avg"].rank(pct=True) * 100
         self.player_data_agg["PPG_rank"] = self.player_data_agg.loc[
-                                               self.player_data_agg["duration"] >= 1800, "pts"].rank(pct=True) * 100
+                                               self.player_data_agg["duration"] >= 1800, "pts_avg"].rank(pct=True) * 100
         self.player_data_agg["PER_rank"] = self.player_data_agg.loc[
                                                self.player_data_agg["duration"] >= 1800, "PER_season"].rank(
             pct=True) * 100
         self.player_data_agg["EFG_rank"] = self.player_data_agg.loc[
                                                self.player_data_agg["duration"] >= 1800, "eFG"].rank(pct=True) * 100
         self.player_data_agg["MPG_rank"] = self.player_data_agg.loc[
-                                               self.player_data_agg["duration"] >= 1800, "duration_avg"].rank(pct=True) * 100
+                                               self.player_data_agg["duration"] >= 1800, "duration_avg"].rank(
+            pct=True) * 100
         self.player_data_agg["USG_rank"] = self.player_data_agg.loc[
                                                self.player_data_agg["duration"] >= 1800, "usage"].rank(pct=True) * 100
