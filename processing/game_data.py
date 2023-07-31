@@ -330,7 +330,7 @@ class GameData:
         pbp_sub3["assisting_player"] = np.nan
 
         # due to inconsistencies in the pbp, need to make sure assists are not being assigned to the same player
-        # but it is almost impossible to get every one of them right, a very small error margin to be expected
+        # , but it is almost impossible to get every one of them right, a very small error margin to be expected
         while idx >= 0:
 
             if pbp_sub3.loc[:, "PLAYTYPE"].iloc[idx] == "AS":
@@ -553,15 +553,10 @@ class GameData:
         away_stats["opp_points_scored"] = home_stats["points_scored"]
 
         home_stats["win"] = (home_stats["points_scored"] > home_stats["opp_points_scored"]).astype(int)
-        away_stats["win"] = away_stats["points_scored"] > away_stats["opp_points_scored"].astype(int)
+        away_stats["win"] = (away_stats["points_scored"] > away_stats["opp_points_scored"]).astype(int)
 
-        home_stats["home"] = True
-        away_stats["home"] = False
-
-        home_stats["home_win"] = home_stats["win"]
-        home_stats["away_win"] = 0
-        away_stats["home_win"] = 0
-        away_stats["away_win"] = away_stats["win"]
+        home_stats["home"] = 1
+        away_stats["home"] = 0
 
         home_stats["2FGR"] = home_stats["2FGM"] / home_stats["2FGA"]
         home_stats["3FGR"] = home_stats["3FGM"] / home_stats["3FGA"]
@@ -806,6 +801,8 @@ class SeasonData:
         self.team_data_agg["2FGR"] = self.team_data_agg["2FGM"] / self.team_data_agg["2FGA"]
         self.team_data_agg["3FGR"] = self.team_data_agg["3FGM"] / self.team_data_agg["3FGA"]
         self.team_data_agg["FTR"] = self.team_data_agg["FTM"] / self.team_data_agg["FTA"]
+        self.team_data_agg["FG"] = (self.team_data_agg["2FGM"] + self.team_data_agg["3FGM"])/\
+                                   (self.team_data_agg["2FGA"] + self.team_data_agg["3FGA"])
         self.team_data_agg["season"] = self.season
         self.team_data_agg["ORtg"] = 100 * self.team_data_agg["points_scored"] / self.team_data_agg["pos"]
         self.team_data_agg["DRtg"] = 100 * self.team_data_agg["opp_points_scored"] / self.team_data_agg["opp_pos"]
@@ -818,6 +815,14 @@ class SeasonData:
         self.team_data_agg["eFG"] = (self.team_data_agg["points_scored"] -
                                      self.team_data_agg["FTM"]) / (
                                             2 * (self.team_data_agg["2FGA"] + self.team_data_agg["3FGA"]))
+
+        self.team_data_agg["pace"] = (self.team_data_agg["pos"] +
+                                      self.team_data_agg["opp_pos"])/(2*self.team_data_agg["game_count"])
+
+
+
+
+
 
     def calculate_per_game_based(self):
         league_vop = np.sum(self.team_data_agg["points_scored"]) / np.sum(self.team_data_agg["pos"])
@@ -935,3 +940,14 @@ class SeasonData:
             pct=True) * 100
         self.player_data_agg["USG_rank"] = self.player_data_agg.loc[
                                                self.player_data_agg["duration"] >= 1800, "usage"].rank(pct=True) * 100
+
+
+        self.team_data_agg["ORtg_rank"] = self.team_data_agg["ORtg"].rank(ascending=False)
+        self.team_data_agg["DRtg_rank"] = self.team_data_agg["ORtg"].rank()
+        self.team_data_agg[""]
+
+
+
+
+
+
