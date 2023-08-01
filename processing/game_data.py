@@ -801,7 +801,7 @@ class SeasonData:
         self.team_data_agg["2FGR"] = self.team_data_agg["2FGM"] / self.team_data_agg["2FGA"]
         self.team_data_agg["3FGR"] = self.team_data_agg["3FGM"] / self.team_data_agg["3FGA"]
         self.team_data_agg["FTR"] = self.team_data_agg["FTM"] / self.team_data_agg["FTA"]
-        self.team_data_agg["FG"] = (self.team_data_agg["2FGM"] + self.team_data_agg["3FGM"])/\
+        self.team_data_agg["FG"] = (self.team_data_agg["2FGM"] + self.team_data_agg["3FGM"]) / \
                                    (self.team_data_agg["2FGA"] + self.team_data_agg["3FGA"])
         self.team_data_agg["season"] = self.season
         self.team_data_agg["ORtg"] = 100 * self.team_data_agg["points_scored"] / self.team_data_agg["pos"]
@@ -817,12 +817,7 @@ class SeasonData:
                                             2 * (self.team_data_agg["2FGA"] + self.team_data_agg["3FGA"]))
 
         self.team_data_agg["pace"] = (self.team_data_agg["pos"] +
-                                      self.team_data_agg["opp_pos"])/(2*self.team_data_agg["game_count"])
-
-
-
-
-
+                                      self.team_data_agg["opp_pos"]) / (2 * self.team_data_agg["game_count"])
 
     def calculate_per_game_based(self):
         league_vop = np.sum(self.team_data_agg["points_scored"]) / np.sum(self.team_data_agg["pos"])
@@ -941,13 +936,12 @@ class SeasonData:
         self.player_data_agg["USG_rank"] = self.player_data_agg.loc[
                                                self.player_data_agg["duration"] >= 1800, "usage"].rank(pct=True) * 100
 
-
         self.team_data_agg["ORtg_rank"] = self.team_data_agg["ORtg"].rank(ascending=False)
-        self.team_data_agg["DRtg_rank"] = self.team_data_agg["ORtg"].rank()
-        self.team_data_agg[""]
-
-
-
-
+        self.team_data_agg["DRtg_rank"] = self.team_data_agg["DRtg"].rank()
+        self.team_data_agg["FG_rank"] = self.team_data_agg["FG"].rank(ascending=False)
+        self.team_data_agg["pace_rank"] = self.team_data_agg["pace"].rank(ascending=False)
+        self.team_data_agg["2FGR_rank"] = self.team_data_agg["2FGR"].rank(ascending=False)
+        self.team_data_agg["3FGR_rank"] = self.team_data_agg["3FGR"].rank(ascending=False)
+        self.team_data_agg["TOR_rank"] = self.team_data_agg["TOR"].rank()
 
 
