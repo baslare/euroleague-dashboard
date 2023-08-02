@@ -31,7 +31,7 @@ def make_pbp_df(pbp_data: dict) -> pd.DataFrame:
     pbp_quarters['time'] = np.where(pbp_quarters["Quarter"] <= 4,
                                     (pbp_quarters["Quarter"]) * 600 - pbp_quarters["min"] * 60 - pbp_quarters["sec"],
                                     2400 + (pbp_quarters["Quarter"] - 4) * 300 - (
-                                                pbp_quarters["min"] * 60 + pbp_quarters["sec"]))
+                                            pbp_quarters["min"] * 60 + pbp_quarters["sec"]))
 
     pbp_quarters = pbp_quarters.sort_values("time")
 
@@ -54,3 +54,5 @@ def make_players_df(players_data: list):
 
 def make_points_df(points: dict):
     return pd.DataFrame.from_records(points.get("Rows"))
+
+

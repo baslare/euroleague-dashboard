@@ -41,6 +41,7 @@ class GameData:
         self.assists_away = pd.DataFrame
 
         self.team_stats: pd.DataFrame
+        self.home_team_name, self.away_team_name = self.get_team_names()
 
     def get_pbp(self, home=True):
         team = self.home_team if home else self.away_team
@@ -83,6 +84,32 @@ class GameData:
             subset=["ac"], keep=False)
         starting_lineup = sorted(list(players["ac"]))
         return starting_lineup
+
+    def get_team_names(self):
+
+        team_name_dict = {
+            "ASV": "Asvel",
+            "BAR": "Barcelona",
+            "BAS": "Baskonia",
+            "BER": "Alba Berlin",
+            "IST": "Efes",
+            "MAD": "Real Madrid",
+            "MCO": "Monaco",
+            "MIL": "Milano",
+            "MUN": "Bayern Munich",
+            "OLY": "Olympiakos",
+            "PAM": "Valencia",
+            "PAN": "Panathinaikos",
+            "PAR": "Partizan",
+            "RED": "Crvena Zvezda",
+            "TEL": "Maccabi Tel Aviv",
+            "ULK": "Fenerbahce",
+            "VIR": "Virtus",
+            "ZAL": "Zalgiris"
+
+        }
+
+        return team_name_dict[self.home_team], team_name_dict[self.away_team]
 
     def get_lineups(self, home=True):
         pbp = self.get_pbp(home)
@@ -555,8 +582,8 @@ class GameData:
         home_stats["win"] = (home_stats["points_scored"] > home_stats["opp_points_scored"]).astype(int)
         away_stats["win"] = (away_stats["points_scored"] > away_stats["opp_points_scored"]).astype(int)
 
-        home_stats["home"] = 1
-        away_stats["home"] = 0
+        home_stats["home"] = True
+        away_stats["home"] = False
 
         home_stats["2FGR"] = home_stats["2FGM"] / home_stats["2FGA"]
         home_stats["3FGR"] = home_stats["3FGM"] / home_stats["3FGA"]
@@ -569,6 +596,8 @@ class GameData:
         home_stats["FT_four"] = home_stats["FTM"] / (
                 home_stats["2FGA"] + home_stats["3FGA"])
 
+        home_stats["team_name"] = self.home_team_name
+
         away_stats["2FGR"] = away_stats["2FGM"] / away_stats["2FGA"]
         away_stats["3FGR"] = away_stats["3FGM"] / away_stats["3FGA"]
         away_stats["FTR"] = away_stats["FTM"] / away_stats["FTA"]
@@ -578,6 +607,8 @@ class GameData:
         away_stats["TOR"] = away_stats["TO"] / (
                 away_stats["2FGA"] + away_stats["3FGA"] + away_stats["multi_ft"] + away_stats["TO"])
         away_stats["FT_four"] = away_stats["FTM"] / (away_stats["2FGA"] + away_stats["3FGA"])
+
+        away_stats["team_name"] = self.away_team_name
 
         self.team_stats = pd.concat([home_stats, away_stats])
         self.team_stats["game_code"] = self.game_code
@@ -791,7 +822,7 @@ class SeasonData:
         numeric_columns = self.team_data.select_dtypes(include=np.number).columns.tolist()
         cols_to_sum = [x for x in numeric_columns]
         cols_dict = {x: "sum" for x in cols_to_sum}
-        self.team_data_agg = self.team_data.groupby(["CODETEAM"]).agg(cols_dict)
+        self.team_data_agg = self.team_data.groupby(["CODETEAM", "team_name"]).agg(cols_dict)
         self.team_data_agg = self.team_data_agg.reset_index()
 
         df_averages = pd.DataFrame({
@@ -818,6 +849,9 @@ class SeasonData:
 
         self.team_data_agg["pace"] = (self.team_data_agg["pos"] +
                                       self.team_data_agg["opp_pos"]) / (2 * self.team_data_agg["game_count"])
+
+        self.team_data_agg["DREBR"] = self.team_data_agg["D"] / (self.team_data_agg["opp_O"] + self.team_data_agg["D"])
+        self.team_data_agg["OREBR"] = self.team_data_agg["O"] / (self.team_data_agg["opp_D"] + self.team_data_agg["O"])
 
     def calculate_per_game_based(self):
         league_vop = np.sum(self.team_data_agg["points_scored"]) / np.sum(self.team_data_agg["pos"])
@@ -936,12 +970,27 @@ class SeasonData:
         self.player_data_agg["USG_rank"] = self.player_data_agg.loc[
                                                self.player_data_agg["duration"] >= 1800, "usage"].rank(pct=True) * 100
 
-        self.team_data_agg["ORtg_rank"] = self.team_data_agg["ORtg"].rank(ascending=False)
-        self.team_data_agg["DRtg_rank"] = self.team_data_agg["DRtg"].rank()
-        self.team_data_agg["FG_rank"] = self.team_data_agg["FG"].rank(ascending=False)
-        self.team_data_agg["pace_rank"] = self.team_data_agg["pace"].rank(ascending=False)
-        self.team_data_agg["2FGR_rank"] = self.team_data_agg["2FGR"].rank(ascending=False)
-        self.team_data_agg["3FGR_rank"] = self.team_data_agg["3FGR"].rank(ascending=False)
-        self.team_data_agg["TOR_rank"] = self.team_data_agg["TOR"].rank()
+        self.team_data_agg["ORtg_rank"] = self.team_data_agg["ORtg"].rank(ascending=False).astype(int)
+        self.team_data_agg["DRtg_rank"] = self.team_data_agg["DRtg"].rank().astype(int)
+        self.team_data_agg["FG_rank"] = self.team_data_agg["FG"].rank(ascending=False).astype(int)
+        self.team_data_agg["pace_rank"] = self.team_data_agg["pace"].rank(ascending=False).astype(int)
+        self.team_data_agg["2FGR_rank"] = self.team_data_agg["2FGR"].rank(ascending=False).astype(int)
+        self.team_data_agg["3FGR_rank"] = self.team_data_agg["3FGR"].rank(ascending=False).astype(int)
+        self.team_data_agg["TOR_rank"] = self.team_data_agg["TOR"].rank().astype(int)
+        self.team_data_agg["AS_rank"] = self.team_data_agg["AS_avg"].rank(ascending=False).astype(int)
+        self.team_data_agg["DREB_rank"] = self.team_data_agg["DREBR"].rank(ascending=False).astype(int)
+        self.team_data_agg["OREB_rank"] = self.team_data_agg["OREBR"].rank(ascending=False).astype(int)
+        self.team_data_agg["FT_rank"] = self.team_data_agg["FT_four"].rank(ascending=False).astype(int)
+        self.team_data_agg["as2P"] = self.team_data_agg["assisted_2fg"] / self.team_data_agg["2FGM"]
+        self.team_data_agg["as3P"] = self.team_data_agg["assisted_3fg"] / self.team_data_agg["3FGM"]
 
+    def aggregate_quantile_data(self):
+        percentiles = [0.25, 0.50, 0.75, 0.95, 1]
 
+        player_quantiles = [self.player_data_agg["PIR"].quantile(x) for x in percentiles]
+
+        df = pd.DataFrame.from_dict({0: [player_quantiles, "player"]
+                                     },
+                                    orient="index").rename(columns={0: "quantiles",
+                                                                    1: "type"})
+        self.quantiles = pd.concat([self.quantiles, df])
