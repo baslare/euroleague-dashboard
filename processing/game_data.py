@@ -987,9 +987,9 @@ class SeasonData:
     def aggregate_quantile_data(self):
         percentiles = [0.25, 0.50, 0.75, 0.95, 1]
 
-        player_quantiles = [self.player_data_agg["PIR"].quantile(x) for x in percentiles]
+        player_quantiles = [self.player_data_agg["PIR_avg"].quantile(x) for x in percentiles]
 
-        df = pd.DataFrame.from_dict({0: [player_quantiles, "player"]
+        df = pd.DataFrame.from_dict({0: [player_quantiles, "player_agg"]
                                      },
                                     orient="index").rename(columns={0: "quantiles",
                                                                     1: "type"})

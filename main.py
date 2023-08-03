@@ -13,7 +13,6 @@ parser.add_argument("--download", help="flag to tell if the season data should b
                                        "otherwise", action="store_true")
 args = parser.parse_args()
 
-
 if __name__ == '__main__':
     el = ELAPI()
 
@@ -52,6 +51,7 @@ if __name__ == '__main__':
     season_instance.aggregate_lineup_data()
     season_instance.aggregate_team_data()
     season_instance.aggregate_player_data()
+    season_instance.aggregate_quantile_data()
 
     season_instance.calculate_per_game_based()
     season_instance.calculate_per_season_based()
