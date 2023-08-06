@@ -55,9 +55,9 @@ services:
     networks:
       - app-tier
     ports:
-      - "8050:8050"
+      - "80:80"
     command: bash -c "
-      gunicorn -b 0.0.0.0:8050 
+      gunicorn -b 0.0.0.0:80 
       main:server
       --reload
       "
