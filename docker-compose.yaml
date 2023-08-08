@@ -43,6 +43,9 @@ services:
       - app-tier
     ports:
       - "8989:8989"
+    volumes:
+      - ../euroleague-dashboard-api/requirements.txt:/api/requirements.txt
+      - ../euroleague-dashboard-api/app:/api/app
 
   dashboard:
     stdin_open: true # docker run -i
@@ -61,6 +64,9 @@ services:
       main:server
       --reload
       "
+    volumes:
+      - ../euroleague-dashboard-dash/requirements.txt:/requirements.txt
+      - ../euroleague-dashboard-dash/app:/app
 networks:
   app-tier:
     driver: bridge
